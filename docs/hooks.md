@@ -128,12 +128,14 @@ that session: why the agent stopped, what it needs, what is done. The row
 has room for a few words on one line and cuts the rest off, which the agent
 is told. Looking at the session clears it. The agent is told to call it in
 every turn it hands back, just before its final message rather than after
-it: what an agent writes before a tool call is folded into one line on
-screen, so a call after the answer would fold the answer away. It cannot
-tell whether the user is watching, so it calls regardless, and never for
-progress. A turn that ends without the call
-leaves a line all the same: the stop hook brings the agent's last message,
-and the row takes its first line.
+it. What an agent writes before a tool call is folded into one line on
+screen, whatever the call is, and only the message after the last call of
+the turn shows in full; so the agent is told that its answer belongs in
+that message, written again there when a call had to follow it, and that a
+notify after the answer would fold the answer away. It cannot tell whether
+the user is watching, so it calls regardless, and never for progress. A
+turn that ends without the call leaves a line all the same: the stop hook
+brings the agent's last message, and the row takes its first line.
 
 ![The user asks one session to run the tests and moves to another. When the tests finish, the first agent's line appears under its row with the dot lit, and goes when the row is opened.](tools-notify.gif)
 
