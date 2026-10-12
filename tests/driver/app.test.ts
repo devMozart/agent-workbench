@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -955,6 +961,12 @@ describe("the real app", () => {
 
   it("runs codex under an account, making its home first", async () => {
     const { driver, home } = app;
+    // The project is the local repository, whatever the tests before left
+    // open, and the window holds it under its resolved path: on Windows the
+    // long form of the runner's short temporary directory.
+    await openProjects(driver, [repo]);
+    await waitForPaneText(driver, SESSIONS, repo.split(/[\\/]/).pop()!);
+    const project = realpathSync.native(repo);
     // An account for the project, written into the machine's settings the
     // way an edit by hand would be: the window hears of it through the
     // watcher. Its Codex home is one nothing has made yet.
@@ -969,7 +981,7 @@ describe("the real app", () => {
         accounts: {
           list: { Work: { claude: null, codex: "~/.codex-work" } },
           everywhere: null,
-          overrides: { [repo]: "Work" },
+          overrides: { [project]: "Work" },
         },
       }),
     );
