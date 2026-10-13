@@ -1,21 +1,24 @@
 /**
  * What each session had in the viewer, kept while the user is elsewhere and
  * put back when they return: the file, its view and the place marked in
- * it, or what the agent presented, or nothing. Switching sessions shows
- * the one switched to as it was left, so a document open beside one
- * session is still open when the user comes back to it. The shape of the
- * window is the viewer's own: a session with nothing to show empties it
- * without closing it, and one with something opens it when it was closed.
+ * it, what the agent presented, a plugin's page, the browser, or nothing.
+ * Switching sessions shows the one switched to as it was left, so a
+ * document open beside one session is still open when the user comes back
+ * to it, and the viewer is closed for a session that had nothing in it,
+ * and opened again for one that had, as a file opened there would.
  */
 
 import { tick } from "svelte";
 import type { MediaItem } from "$lib/media.svelte";
+import { browser } from "$lib/browser.svelte";
 import {
-  deselect,
+  closeViewer,
   files,
   select,
   setScope,
+  showBrowser,
   showMedia,
+  showPluginView,
   type View,
 } from "$lib/files.svelte";
 import { enterReview, layout } from "$lib/layout.svelte";
@@ -32,6 +35,12 @@ export type Viewed =
       picked: NonNullable<typeof files.picked> | null;
     }
   | { kind: "media"; project: string; item: MediaItem }
+  | {
+      kind: "plugin";
+      project: string;
+      page: NonNullable<typeof files.pluginView>;
+    }
+  | { kind: "browser"; project: string }
   | null;
 
 const viewed = new Map<string, Viewed>();
@@ -45,6 +54,9 @@ export function snapshot(): Viewed {
   const project = workspace.active;
   if (project === null || layout.mode !== "reviewing") return null;
   if (files.media !== null) return { kind: "media", project, item: files.media };
+  if (files.pluginView !== null)
+    return { kind: "plugin", project, page: files.pluginView };
+  if (browser.showing) return { kind: "browser", project };
   if (files.selected === null) return null;
   return {
     kind: "file",
@@ -56,30 +68,38 @@ export function snapshot(): Viewed {
   };
 }
 
-/** Puts a session's viewer back. Waits a tick first, since the switch may
-    have moved the project and the tree clears itself on that. */
+/** Puts a session's viewer back, closed when it had nothing. Waits a tick
+    first, since the switch may have moved the project and the tree clears
+    itself on that. The keyboard stays where picking the session put it:
+    this is the viewer coming back, not a file being opened. */
 async function restore(what: Viewed) {
   await tick();
   if (what === null) {
-    deselect();
+    closeViewer();
     return;
   }
   if (what.project !== workspace.active) return;
+  const focus = layout.focus;
   if (what.kind === "media") {
     showMedia(what.item);
-    return;
+  } else if (what.kind === "plugin") {
+    showPluginView(what.page);
+  } else if (what.kind === "browser") {
+    showBrowser();
+  } else {
+    if (
+      files.scope !== "all" &&
+      !files.changed.some((file) => file.path === what.path)
+    ) {
+      await setScope("all");
+    }
+    files.view = what.view;
+    files.target = what.target;
+    await select(what.path);
+    files.picked = what.picked;
+    enterReview();
   }
-  if (
-    files.scope !== "all" &&
-    !files.changed.some((file) => file.path === what.path)
-  ) {
-    await setScope("all");
-  }
-  files.view = what.view;
-  files.target = what.target;
-  await select(what.path);
-  files.picked = what.picked;
-  enterReview();
+  layout.focus = focus;
 }
 
 /** The user switched to a session: what the one they left had is kept,

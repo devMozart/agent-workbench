@@ -271,9 +271,9 @@ of a file or what was presented; [browser](browser.md) has what it shows
 there.
 
 What the viewer holds belongs to the session on screen. Switching to
-another session shows what that one had, the file at its place or what was
-presented, and a session with nothing to show empties the viewer without
-closing it, so the agent is not resized on every switch. Coming back to a
-session finds its viewer as it was left, open again if it had been closed
-in the meantime. A viewer closed with <kbd>Esc</kbd> is closed for its
-session too.
+another session shows what that one had, the file at its place, what was
+presented, a plugin's page or the browser, and closes the viewer for a
+session that had nothing in it. Coming back to a session finds its viewer
+as it was left, open again if it had been closed in the meantime, with the
+keyboard where picking the session put it. A viewer closed with
+<kbd>Esc</kbd> is closed for its session too.

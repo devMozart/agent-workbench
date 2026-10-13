@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetViewers, sessionShown, snapshot } from "$lib/viewers.svelte";
-import { clear, closeViewer, files, refresh, showMedia, showRange } from "$lib/files.svelte";
+import {
+  clear,
+  closeViewer,
+  files,
+  refresh,
+  showBrowser,
+  showMedia,
+  showPluginView,
+  showRange,
+} from "$lib/files.svelte";
+import { browser, resetBrowser } from "$lib/browser.svelte";
 import { enterReview, layout } from "$lib/layout.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 
@@ -32,6 +42,8 @@ vi.mock("$lib/core", () => ({
     },
     async setSelection() {},
     async watchShown() {},
+    async browserPlace() {},
+    async browserHide() {},
   }),
 }));
 
@@ -62,6 +74,8 @@ beforeEach(async () => {
   layout.focus = "agent";
   layout.width = 1600;
   files.media = null;
+  files.pluginView = null;
+  resetBrowser();
   workspace.open.push(repo("/one"), repo("/two"));
   workspace.active = "/one";
   await refresh();
@@ -97,15 +111,52 @@ describe("switching sessions", () => {
     await showRange("docs/a.md", 2, 2, null);
     expect(layout.mode).toBe("reviewing");
 
-    // The other session had nothing: the viewer empties and stays open.
+    // The other session had nothing: the viewer closes.
     await sessionShown("b");
     expect(files.selected).toBeNull();
-    expect(layout.mode).toBe("reviewing");
+    expect(layout.mode).toBe("working");
 
     await sessionShown("a");
     expect(files.selected).toBe("docs/a.md");
     expect(files.view).toBe("content");
     expect(files.target).toEqual({ path: "docs/a.md", line: 2, to: 2, note: null });
+    expect(layout.mode).toBe("reviewing");
+  });
+
+  it("leaves the keyboard where picking the session put it", async () => {
+    await sessionShown("a");
+    await showRange("docs/a.md", 2, 2, null);
+    await sessionShown("b");
+    layout.focus = "agent";
+    await sessionShown("a");
+    expect(layout.mode).toBe("reviewing");
+    expect(layout.focus).toBe("agent");
+  });
+
+  it("keeps a plugin's page and the browser the same way", async () => {
+    const page = {
+      key: "p:board",
+      source: "board",
+      plugin: "p",
+      project: "/one",
+      width: "wide" as const,
+      html: "<p>Board</p>",
+    };
+    await sessionShown("a");
+    showPluginView(page);
+    await sessionShown("b");
+    showBrowser();
+    expect(files.pluginView).toBeNull();
+    expect(browser.showing).toBe(true);
+
+    await sessionShown("a");
+    expect(files.pluginView).toEqual(page);
+    expect(browser.showing).toBe(false);
+    expect(layout.mode).toBe("reviewing");
+
+    await sessionShown("b");
+    expect(files.pluginView).toBeNull();
+    expect(browser.showing).toBe(true);
     expect(layout.mode).toBe("reviewing");
   });
 

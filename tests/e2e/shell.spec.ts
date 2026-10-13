@@ -558,17 +558,15 @@ test.describe("the file viewer", () => {
     await expect(hunk).toBeVisible();
 
     // A second session, started from the peeked pane: it has nothing to
-    // show, so the viewer empties and stays open, and the pane goes back.
+    // show, so the viewer closes and the sessions pane is back in full.
     await page.keyboard.press(`${MOD}+1`);
     await page.getByTestId("new-session").click();
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
-    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    await expect(page.getByTestId("mode-readout")).toHaveText("working");
     await expect(hunk).toHaveCount(0);
-    await expect(page.getByTestId("viewer")).toContainText("Pick a file");
-    await expect(page.getByTestId("unfold-sessions")).toBeVisible();
+    await expect(page.locator(SESSIONS)).toBeVisible();
 
-    // Back to the first: its diff is where it was.
-    await page.keyboard.press(`${MOD}+1`);
+    // Back to the first: its diff is where it was, and the viewer is open.
     await page.locator("[data-testid='session-row']").first().click();
     await expect(page.locator(".session.on")).toContainText("session 1");
     await expect(hunk).toBeVisible();
