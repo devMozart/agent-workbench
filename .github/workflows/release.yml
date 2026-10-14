@@ -76,6 +76,17 @@ jobs:
       - run: src-tauri/target/${{ matrix.target }}/release/agent-workbench-remote version
         if: matrix.os != 'macos-latest' || matrix.target == 'aarch64-apple-darwin'
 
+      # A release is signed or it is not made: a tag that finds no
+      # certificate stops here rather than shipping an unsigned daemon. A
+      # manual run builds unsigned, for trying the workflow out.
+      - name: The certificate must be there for a release
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v') && env.CERTIFICATE == ''
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          echo "::error::MACOS_CERTIFICATE is not available to this repository; a release is not built unsigned. Grant the organisation's signing secrets to this repository and run the tag again."
+          exit 1
+
       # The macOS daemons carry the organisation's Developer ID, as the app
       # does, so a machine that gets one from the release or the tap runs
       # what the certificate says it is. The identity is the secret's, or
@@ -210,6 +221,17 @@ jobs:
         id: signing
         shell: bash
         run: echo "apple=${{ secrets.MACOS_CERTIFICATE != '' }}" >> "$GITHUB_OUTPUT"
+
+      # A release is signed or it is not made: a tag that finds no
+      # certificate stops here, on every platform, rather than attaching
+      # unsigned bundles to the draft. A manual run builds unsigned, for
+      # trying the workflow out.
+      - name: The certificate must be there for a release
+        if: startsWith(github.ref, 'refs/tags/v') && steps.signing.outputs.apple != 'true'
+        shell: bash
+        run: |
+          echo "::error::MACOS_CERTIFICATE is not available to this repository; a release is not built unsigned. Grant the organisation's signing secrets to this repository and run the tag again."
+          exit 1
 
       # The bundler signs the app and what it built, not the daemons it
       # carries as resources, and notarization refuses a Mach-O inside the
