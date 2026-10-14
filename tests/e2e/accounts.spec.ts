@@ -144,7 +144,7 @@ test.describe("starting a session under an account", () => {
     expect((await spawns(page))[0].agent).toBe("claude-code");
     expect((await spawns(page))[0].configDir).toBe("~/.claude-work");
 
-    // Switched in the footer, for this one session only.
+    // Switched in the account control, for this one session only.
     await page.getByTestId("new-session").click();
     await page
       .locator('[data-testid="account-option"][data-account=""]')

@@ -101,11 +101,13 @@ without them, which is what an Escape at the keyboard does.
 With accounts named in the [settings](settings.md#accounts), a project
 runs under one of them, and its row carries the account's name as a tag
 when that is not the agents' own. The new-session row then opens into the
-choice whether or not there is more than one agent, and the choice carries
-a footer, `as`, with the accounts in a row and the project's own marked.
-The session starts under the one marked; a click on another, or Left and
-Right at the keyboard, switches it for this one session, and the next
-choice starts on the project's account again. A session an orchestrator
+choice whether or not there is more than one agent, and the choice asks
+for the account first: under `new session as`, the accounts share a row
+across the column with the project's own marked, and the agents follow
+under `with`, even when there is only one. The session starts under the
+account marked; a click on another, or Left and Right at the keyboard,
+switches it for this one session, and the next choice starts on the
+project's account again. A session an orchestrator
 starts runs under the project's account unless the start names another,
 and a session resumed runs under the account it ran under.
 

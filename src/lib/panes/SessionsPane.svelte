@@ -64,7 +64,7 @@
   let choosing = $state<string | null>(null);
 
   /** The account the open choice would start under: the project's own to
-      begin with, and whatever the footer was switched to. */
+      begin with, and whatever the control was switched to. */
   let picked = $state<string | null>(null);
 
   /** New session: with nothing to choose it starts; otherwise the row
@@ -85,7 +85,7 @@
     start(path, agent, picked);
   }
 
-  /** The accounts the footer offers, the agents' own first. */
+  /** The accounts the control offers, the agents' own first. */
   let offered = $derived<(string | null)[]>([null, ...names()]);
 
   /** Left and Right in the choice walk the accounts. */
@@ -536,11 +536,29 @@
   {#if choosable && choosing === path}
     <div class="choice" role="group" aria-label="Agent for the new session" data-testid="agent-choice">
       <div class="choice-head">
-        <span>new session with</span>
+        <span>new session {hasAccounts() ? "as" : "with"}</span>
         <button class="cancel" tabindex="-1" onclick={dismiss} aria-label="Cancel" data-testid="choice-cancel"
           >Esc</button
         >
       </div>
+      <!-- The account comes before the agent: the control takes the row's
+           width under the head, and the agents follow under "with". -->
+      {#if hasAccounts()}
+        <div class="accounts" role="radiogroup" aria-label="Account for the new session" data-testid="account-choice">
+          {#each offered as account (account ?? "")}
+            <button
+              role="radio"
+              tabindex="-1"
+              aria-checked={picked === account}
+              class:on={picked === account}
+              onclick={() => (picked = account)}
+              data-testid="account-option"
+              data-account={account ?? ""}>{accountLabel(account)}</button
+            >
+          {/each}
+        </div>
+        <div class="choice-head"><span>with</span></div>
+      {/if}
       {#each installed() as id (id)}
         <button
           class="option"
@@ -556,24 +574,6 @@
           {#if sessions.preferred[path] === id}<span class="state">last used</span>{/if}
         </button>
       {/each}
-      {#if hasAccounts()}
-        <div class="choice-foot" data-testid="account-choice">
-          <span>as</span>
-          <div class="mini" role="radiogroup" aria-label="Account for the new session">
-            {#each offered as account (account ?? "")}
-              <button
-                role="radio"
-                tabindex="-1"
-                aria-checked={picked === account}
-                class:on={picked === account}
-                onclick={() => (picked = account)}
-                data-testid="account-option"
-                data-account={account ?? ""}>{accountLabel(account)}</button
-              >
-            {/each}
-          </div>
-        </div>
-      {/if}
     </div>
   {:else}
     <div class="new-row" class:cursor={current === `new:${path}`} data-row="new:{path}">
@@ -1305,28 +1305,20 @@
     white-space: nowrap;
   }
 
-  /* The account the choice starts under, switched for this one session. */
-  .choice-foot {
+  /* The account the choice starts under, switched for this one session:
+     one segment per account, sharing the row's width. */
+  .accounts {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px var(--row-pad-x) 2px var(--row-indent);
-    font-family: var(--chrome);
-    font-size: var(--label-size);
-    letter-spacing: 0.05em;
-    color: var(--ink-3);
-  }
-
-  .mini {
-    display: inline-flex;
-    min-width: 0;
+    margin: 2px var(--row-pad-x) 4px var(--row-indent);
     border: 1px solid var(--rule);
     border-radius: var(--radius-tag);
     overflow: hidden;
   }
 
-  .mini button {
-    padding: 1px 7px;
+  .accounts button {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 6px;
     border: 0;
     border-right: 1px solid var(--rule);
     background: none;
@@ -1335,17 +1327,20 @@
     letter-spacing: var(--label-track-fine);
     color: var(--ink-3);
     cursor: pointer;
-    max-width: 12ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .mini button:last-child {
+  .accounts button:hover {
+    color: var(--ink-2);
+  }
+
+  .accounts button:last-child {
     border-right: 0;
   }
 
-  .mini button.on {
+  .accounts button.on {
     background: var(--accent-soft);
     color: var(--accent);
   }
