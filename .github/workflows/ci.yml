@@ -44,6 +44,32 @@ jobs:
           echo "other=$other" >> "$GITHUB_OUTPUT"
           echo "Windows and macOS jobs: $other"
 
+  # The organisation's signing secrets must reach this repository: a release
+  # is signed or it is not made, and a grant lost on the organisation side
+  # shows here on the next push instead of at the next tag. Pull requests
+  # from forks never see secrets, so this does not run for pull requests.
+  signing:
+    name: Signing secrets
+    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request'
+    steps:
+      - env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          missing=""
+          for name in MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Not available to this repository:$missing. Grant the organisation's signing secrets to this repository under its Actions secrets."
+            exit 1
+          fi
+          echo "All signing secrets reach this repository."
+
   # The frontend as a user meets it: types, stores, and the whole app in a
   # real browser against a fake core. Platform-independent, so one runner.
   frontend:

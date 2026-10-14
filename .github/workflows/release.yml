@@ -20,6 +20,7 @@ jobs:
   checks:
     name: Checks
     uses: ./.github/workflows/ci.yml
+    secrets: inherit
     with:
       other: true
 

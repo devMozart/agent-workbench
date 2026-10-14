@@ -8,7 +8,11 @@ through the driver tier, with a screenshot of the window kept as an
 artifact. The core's tests on Windows and macOS and the driver tier on
 Windows run before every release, where a failure on any of them stops the
 build, or on request from the Actions tab; those runners cost two and ten
-Linux minutes a minute, so a push does not run them.
+Linux minutes a minute, so a push does not run them. Every push to main
+also checks that the organisation's signing secrets reach this repository,
+so a grant lost on the organisation side fails the next push and not the
+next release; pull requests skip that check, since a fork never sees
+secrets.
 [Testing](testing.md) says what each tier covers.
 
 ## Cutting a release
@@ -58,8 +62,9 @@ missing, as workflow artifacts, for trying the workflow out.
   `NOTARY_KEY` (an App Store Connect API key, as the PEM or base64 of it),
   `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID` notarize it. These are the
   organisation's secrets, shared with its other apps: an organisation owner
-  grants them to this repository under the organisation's Actions secrets,
-  and a tag build fails at once when they stop reaching it. With the
+  grants them to this repository under the organisation's Actions secrets;
+  CI fails on the next push when they stop reaching it, and a tag build
+  fails before building if they are missing on the day. With the
   certificate alone the app is signed but not notarized. A manual run of
   the release workflow from the Actions tab builds signed bundles as
   workflow artifacts without touching releases, which is how a change to
