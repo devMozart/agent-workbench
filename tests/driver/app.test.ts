@@ -31,6 +31,21 @@ function located(driver: WebDriver, selector: string, ms = 10_000) {
   return driver.wait(until.elementLocated(By.css(selector)), ms);
 }
 
+/** Clicks a control once it takes clicks: one disabled while the store is
+    busy, as the plugin controls are until the core has answered, takes
+    none, and a click on it does nothing. */
+async function clickEnabled(driver: WebDriver, selector: string, ms = 10_000) {
+  await driver.wait(
+    async () => {
+      const found = await driver.findElements(By.css(selector));
+      return found.length > 0 && (await found[0].isEnabled());
+    },
+    ms,
+    `${selector} never took a click`,
+  );
+  await driver.findElement(By.css(selector)).click();
+}
+
 /** Clicks until what the click does has shown, since a window that has lost
     the foreground on Windows spends the first click on getting it back. */
 async function clickUntil(
@@ -665,7 +680,7 @@ describe("the real app", () => {
       .click();
     await (await located(driver, "[data-testid='plugin-location']"))
       .sendKeys(PLUGIN_SOURCE);
-    await (await located(driver, "[data-testid='plugin-add']")).click();
+    await clickEnabled(driver, "[data-testid='plugin-add']");
     const own = "[data-testid='plugin-source']:not([data-known])";
     await driver.wait(until.elementLocated(By.css(own)), 20_000);
     expect(await textOf(driver, own)).toContain("directory");
@@ -680,8 +695,7 @@ describe("the real app", () => {
     );
 
     // On, after the question that comes with it, and started.
-    await (await located(driver, `${SETTINGS_PLUGIN} [data-testid='plugin-on']`))
-      .click();
+    await clickEnabled(driver, `${SETTINGS_PLUGIN} [data-testid='plugin-on']`);
     await (await located(driver, "[data-testid='plugin-agree']")).click();
     await driver.wait(
       async () => {
@@ -696,8 +710,9 @@ describe("the real app", () => {
     // and the process starts on what the build left behind.
     const builtState = () =>
       textOf(driver, `${SETTINGS_BUILT} [data-testid='plugin-state']`);
-    await (await located(driver, `${SETTINGS_BUILT} [data-testid='plugin-on']`))
-      .click();
+    // The first plugin's row says starting before the core has answered,
+    // and the controls take no click until it has.
+    await clickEnabled(driver, `${SETTINGS_BUILT} [data-testid='plugin-on']`);
     await (await located(driver, "[data-testid='plugin-agree']")).click();
     await driver.wait(
       async () => (await builtState()).includes("running 0.4.0"),
