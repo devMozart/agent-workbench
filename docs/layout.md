@@ -276,4 +276,6 @@ presented, a plugin's page or the browser, and closes the viewer for a
 session that had nothing in it. Coming back to a session finds its viewer
 as it was left, open again if it had been closed in the meantime, with the
 keyboard where picking the session put it. A viewer closed with
-<kbd>Esc</kbd> is closed for its session too.
+<kbd>Esc</kbd> is closed for its session too; one that opening the sessions
+pane closed is not, since the pane is opened to pick a session rather than
+to put the document away, so switching away and back finds it open.

@@ -21,7 +21,7 @@ import {
   showPluginView,
   type View,
 } from "$lib/files.svelte";
-import { enterReview, layout } from "$lib/layout.svelte";
+import { enterReview, layout, togglePane } from "$lib/layout.svelte";
 import { byKey } from "$lib/sessions.svelte";
 import { workspace } from "$lib/workspace.svelte";
 
@@ -47,6 +47,12 @@ const viewed = new Map<string, Viewed>();
 
 /** The session whose viewer is on screen. */
 let shown: string | null = null;
+
+/** What the viewer held when opening the sessions pane closed it. The
+    pane is opened to pick a session, not to put the document away, so the
+    session on screen keeps this as its viewer when the user switches from
+    it; a document opened in the meantime takes its place. */
+let parked: Viewed = null;
 
 /** What the viewer holds right now, as the session on screen will get it
     back: null for nothing, and for the viewer closed. */
@@ -102,10 +108,25 @@ async function restore(what: Viewed) {
   layout.focus = focus;
 }
 
+/** Opens the sessions pane from its folded column. Reviewing is what folds
+    it, so the viewer closes first, parked for its session, and the pane
+    comes back with the working shape. A window too narrow for the pane
+    leaves it folded. */
+export function unfoldSessions() {
+  if (layout.mode === "reviewing") {
+    parked = snapshot();
+    closeViewer();
+  }
+  if (!layout.sessionsChosen) togglePane("sessions");
+}
+
 /** The user switched to a session: what the one they left had is kept,
     and what this one had comes back. Resolves once it is on screen. */
 export async function sessionShown(key: string | null) {
-  if (shown !== null && shown !== key) viewed.set(shown, snapshot());
+  if (shown !== null && shown !== key) {
+    viewed.set(shown, layout.mode === "reviewing" ? snapshot() : parked);
+  }
+  parked = null;
   for (const stale of viewed.keys()) {
     if (byKey(stale) === null) viewed.delete(stale);
   }
@@ -119,4 +140,5 @@ export async function sessionShown(key: string | null) {
 export function resetViewers() {
   viewed.clear();
   shown = null;
+  parked = null;
 }

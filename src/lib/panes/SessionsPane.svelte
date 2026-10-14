@@ -46,7 +46,7 @@
     sessionsVisible,
     type PaneId,
   } from "$lib/layout.svelte";
-  import { unfoldSessions } from "$lib/files.svelte";
+  import { unfoldSessions } from "$lib/viewers.svelte";
   import { chordFor, describe } from "$lib/keys.svelte";
   import { flip } from "svelte/animate";
   import { rowFade, rowMove } from "$lib/motion";

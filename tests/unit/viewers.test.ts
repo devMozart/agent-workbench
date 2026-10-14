@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetViewers, sessionShown, snapshot } from "$lib/viewers.svelte";
+import { resetViewers, sessionShown, snapshot, unfoldSessions } from "$lib/viewers.svelte";
 import {
   clear,
   closeViewer,
@@ -121,6 +121,28 @@ describe("switching sessions", () => {
     expect(files.view).toBe("content");
     expect(files.target).toEqual({ path: "docs/a.md", line: 2, to: 2, note: null });
     expect(layout.mode).toBe("reviewing");
+  });
+
+  it("keeps what opening the sessions pane closed, for the session it was open beside", async () => {
+    await sessionShown("a");
+    showMedia(item);
+    unfoldSessions();
+    expect(layout.mode).toBe("working");
+    await sessionShown("b");
+    await sessionShown("a");
+    expect(files.media).toEqual(item);
+    expect(layout.mode).toBe("reviewing");
+  });
+
+  it("lets a document opened after the pane was opened take the parked one's place", async () => {
+    await sessionShown("a");
+    showMedia(item);
+    unfoldSessions();
+    await showRange("docs/a.md", 1, 1, null);
+    await sessionShown("b");
+    await sessionShown("a");
+    expect(files.media).toBeNull();
+    expect(files.selected).toBe("docs/a.md");
   });
 
   it("leaves the keyboard where picking the session put it", async () => {

@@ -23,7 +23,7 @@
   import { diffRequested, notified, showRequested, switched, terminalRequested } from "$lib/show.svelte";
   import { watchSelection } from "$lib/selection.svelte";
   import { watchViewed } from "$lib/viewed.svelte";
-  import { sessionShown } from "$lib/viewers.svelte";
+  import { sessionShown, unfoldSessions } from "$lib/viewers.svelte";
   import { watchProcesses } from "$lib/processes.svelte";
   import {
     stateChanged as pluginStateChanged,
@@ -50,7 +50,6 @@
     select,
     toggleScope,
     toggleView,
-    unfoldSessions,
   } from "$lib/files.svelte";
   import {
     cycle as cycleSession,

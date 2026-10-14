@@ -574,6 +574,30 @@ test.describe("the file viewer", () => {
     await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
   });
 
+  // Opening the sessions pane for real closes the viewer, but the document
+  // is still the session's: switching away and back finds it open.
+  test("brings a viewer back that opening the sessions pane had closed", async ({
+    page,
+  }) => {
+    await page.getByTestId("new-session").click();
+    await expect(page.locator(AGENT)).toContainText("running");
+    await page.locator(TREE).focus();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    const hunk = page.getByTestId("viewer").getByText("@@ -1,9 +1,12 @@");
+    await expect(hunk).toBeVisible();
+
+    await page.keyboard.press(`${MOD}+b`);
+    await expect(page.getByTestId("mode-readout")).toHaveText("working");
+    await page.getByTestId("new-session").click();
+    await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
+
+    await page.locator("[data-testid='session-row']").first().click();
+    await expect(hunk).toBeVisible();
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+  });
+
   // What an agent asks to show is for its own session: a call from a
   // session the user is not looking at waits on that session, and opens
   // when they switch to it, in place of taking the viewer over.

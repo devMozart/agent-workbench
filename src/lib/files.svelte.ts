@@ -546,14 +546,6 @@ export function closeViewer() {
   exitReview();
 }
 
-/** Opens the sessions pane from its folded column. Reviewing is what folds
-    it, so the viewer closes first and the pane comes back with the working
-    shape. A window too narrow for the pane leaves it folded. */
-export function unfoldSessions() {
-  if (layout.mode === "reviewing") closeViewer();
-  if (!layout.sessionsChosen) togglePane("sessions");
-}
-
 export async function setScope(scope: Scope) {
   files.scope = scope;
   if (scope === "all" && !files.everythingLoaded) await loadEverything();
