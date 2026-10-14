@@ -410,7 +410,12 @@ export async function installFakeCore(
           (w.__resizes ??= []).push({ id, cols, rows });
         },
         kill: async () => {},
-        ptyCwd: async () => null,
+        // Where a session's process is working, when a test has said so in
+        // __cwds by pty id; the changes pane follows it into a worktree.
+        ptyCwd: async (id: string) => {
+          const w = window as unknown as { __cwds?: Record<string, string> };
+          return w.__cwds?.[id] ?? null;
+        },
         // Plugin sources, kept here. The list the app ships offers one
         // source, unfetched, with its plugins named; a URL with "good" in
         // it adds a source of the user's own, anything else is refused.

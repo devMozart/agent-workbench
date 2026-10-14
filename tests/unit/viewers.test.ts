@@ -14,12 +14,15 @@ import { browser, resetBrowser } from "$lib/browser.svelte";
 import { enterReview, layout } from "$lib/layout.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 
-/** The sessions the window knows, by key. */
-const known = new Set<string>();
+/** The sessions the window knows, by key, with the project each is in. */
+const known = new Map<string, string>();
 
 vi.mock("$lib/sessions.svelte", async (original) => ({
   ...(await original<typeof import("$lib/sessions.svelte")>()),
-  byKey: (key: string) => (known.has(key) ? { key } : null),
+  byKey: (key: string) => {
+    const project = known.get(key);
+    return project === undefined ? null : { key, project };
+  },
 }));
 
 vi.mock("$lib/core", () => ({
@@ -68,8 +71,8 @@ beforeEach(async () => {
   clear();
   resetViewers();
   known.clear();
-  known.add("a");
-  known.add("b");
+  known.set("a", "/one");
+  known.set("b", "/one");
   layout.mode = "working";
   layout.focus = "agent";
   layout.width = 1600;
@@ -220,9 +223,35 @@ describe("switching sessions", () => {
     await sessionShown("b");
     known.delete("a");
     await sessionShown("b");
-    known.add("a");
+    known.set("a", "/one");
     await sessionShown("a");
     expect(files.selected).toBeNull();
+  });
+
+  it("keeps the viewer of a session left for another project, under its own", async () => {
+    known.set("b", "/two");
+    await sessionShown("a");
+    await showRange("docs/a.md", 2, 2, null);
+
+    // Picking a session of another project moves the project first; the
+    // switch is seen next, and then the tree clears itself and reads the
+    // new one.
+    workspace.active = "/two";
+    let switching = sessionShown("b");
+    clear();
+    void refresh();
+    await switching;
+    expect(files.selected).toBeNull();
+    expect(layout.mode).toBe("working");
+
+    workspace.active = "/one";
+    switching = sessionShown("a");
+    clear();
+    void refresh();
+    await switching;
+    expect(files.selected).toBe("docs/a.md");
+    expect(files.scope).toBe("changed");
+    expect(layout.mode).toBe("reviewing");
   });
 
   it("leaves a viewer from another project alone", async () => {

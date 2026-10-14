@@ -229,8 +229,9 @@
   // Switching to a session puts its viewer back as it was left, then opens
   // what its agent asked to show while the user was looking at another,
   // outside the effect's own reads: either may move the viewer and the
-  // project.
-  $effect(() => {
+  // project. Before the DOM updates, so the viewer of the session left is
+  // recorded before the changes pane clears its tree for the new root.
+  $effect.pre(() => {
     const key = sessions.active;
     untrack(() => {
       // Picked from the peeked pane, or started there: the pane goes back.

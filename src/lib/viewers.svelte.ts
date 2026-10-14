@@ -19,6 +19,7 @@ import {
   showBrowser,
   showMedia,
   showPluginView,
+  treeSettled,
   type View,
 } from "$lib/files.svelte";
 import { enterReview, layout, togglePane } from "$lib/layout.svelte";
@@ -55,9 +56,10 @@ let shown: string | null = null;
 let parked: Viewed = null;
 
 /** What the viewer holds right now, as the session on screen will get it
-    back: null for nothing, and for the viewer closed. */
-export function snapshot(): Viewed {
-  const project = workspace.active;
+    back: null for nothing, and for the viewer closed. It belongs to the
+    project given, the session's own: by the time a switch is seen the
+    active project may already be the one switched to. */
+export function snapshot(project = workspace.active): Viewed {
   if (project === null || layout.mode !== "reviewing") return null;
   if (files.media !== null) return { kind: "media", project, item: files.media };
   if (files.pluginView !== null)
@@ -75,15 +77,19 @@ export function snapshot(): Viewed {
 }
 
 /** Puts a session's viewer back, closed when it had nothing. Waits a tick
-    first, since the switch may have moved the project and the tree clears
-    itself on that. The keyboard stays where picking the session put it:
-    this is the viewer coming back, not a file being opened. */
+    first, since the switch may have moved the project or the worktree and
+    the tree clears itself on that, and then for the tree to be read again,
+    so a changed file is found in the list it is in. The keyboard stays
+    where picking the session put it: this is the viewer coming back, not a
+    file being opened. */
 async function restore(what: Viewed) {
   await tick();
   if (what === null) {
     closeViewer();
     return;
   }
+  if (what.project !== workspace.active) return;
+  await treeSettled();
   if (what.project !== workspace.active) return;
   const focus = layout.focus;
   if (what.kind === "media") {
@@ -124,7 +130,8 @@ export function unfoldSessions() {
     and what this one had comes back. Resolves once it is on screen. */
 export async function sessionShown(key: string | null) {
   if (shown !== null && shown !== key) {
-    viewed.set(shown, layout.mode === "reviewing" ? snapshot() : parked);
+    const own = byKey(shown)?.project ?? workspace.active;
+    viewed.set(shown, layout.mode === "reviewing" ? snapshot(own) : parked);
   }
   parked = null;
   for (const stale of viewed.keys()) {

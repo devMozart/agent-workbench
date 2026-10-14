@@ -153,8 +153,22 @@ function fromChanged(file: ChangedFile): FileEntry {
 let treeRead = 0;
 let fileRead = 0;
 
+/** The latest read of the tree, settled or still being answered. */
+let reading: Promise<void> = Promise.resolve();
+
+/** Resolves when the latest read of the tree has landed, so what needs
+    the list waits for it rather than reading one that is on its way. */
+export function treeSettled(): Promise<void> {
+  return reading;
+}
+
 /** Re-reads the working tree. Called on open and whenever the watcher fires. */
-export async function refresh() {
+export function refresh(): Promise<void> {
+  reading = readTree();
+  return reading;
+}
+
+async function readTree() {
   const root = watchRoot();
   const read = ++treeRead;
   if (root === null) {

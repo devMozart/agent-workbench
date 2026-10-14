@@ -574,6 +574,108 @@ test.describe("the file viewer", () => {
     await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
   });
 
+  // Two sessions that both exist, switched between by picking their rows:
+  // the one with nothing closes the viewer, and the one with a document
+  // opens it again.
+  test("brings a viewer back when switching between existing sessions", async ({
+    page,
+  }) => {
+    await page.getByTestId("new-session").click();
+    await expect(page.locator(AGENT)).toContainText("running");
+    await page.getByTestId("new-session").click();
+    await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
+    await page.locator("[data-testid='session-row']").first().click();
+    await expect(page.locator(".session.on")).toContainText("session 1");
+    await page.locator(TREE).focus();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    const hunk = page.getByTestId("viewer").getByText("@@ -1,9 +1,12 @@");
+    await expect(hunk).toBeVisible();
+
+    await page.keyboard.press(`${MOD}+1`);
+    await page.locator("[data-testid='session-row']").nth(1).click();
+    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(page.getByTestId("mode-readout")).toHaveText("working");
+    await expect(hunk).toHaveCount(0);
+
+    await page.locator("[data-testid='session-row']").first().click();
+    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(hunk).toBeVisible();
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+  });
+
+  // The same with what the agent presented, and with the chord that steps
+  // between sessions rather than the pane.
+  test("brings presented media back when stepping between sessions", async ({
+    page,
+  }) => {
+    await page.getByTestId("new-session").click();
+    await expect(page.locator(AGENT)).toContainText("running");
+    await page.getByTestId("new-session").click();
+    await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
+    await page.locator("[data-testid='session-row']").first().click();
+    await expect(page.locator(".session.on")).toContainText("session 1");
+    await page.evaluate(
+      (project) =>
+        (window as unknown as { __presentRequest: (request: unknown) => void }).__presentRequest({
+          files: [`${project}/shots/one.png`],
+          caption: "One shot.",
+          cwd: project,
+        }),
+      PROJECT,
+    );
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    const caption = page.getByTestId("media-caption");
+    await expect(caption).toHaveText("One shot.");
+
+    await page.keyboard.press(`${MOD}+Shift+ArrowDown`);
+    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(page.getByTestId("mode-readout")).toHaveText("working");
+    await expect(caption).toHaveCount(0);
+
+    await page.keyboard.press(`${MOD}+Shift+ArrowDown`);
+    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(caption).toHaveText("One shot.");
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+  });
+
+  // A session working in a worktree has a tree of its own: switching to one
+  // in the project's own tree clears the pane, and the document still comes
+  // back with its session.
+  test("brings a viewer back for a session working in a worktree", async ({
+    page,
+  }) => {
+    await page.getByTestId("new-session").click();
+    await expect(page.locator(AGENT)).toContainText("running");
+    await page.evaluate((project) => {
+      (window as unknown as { __cwds: Record<string, string> }).__cwds = {
+        "pty-1": `${project}/.claude/worktrees/feature`,
+      };
+    }, PROJECT);
+    await expect(page.locator(CHANGES)).toContainText("worktree feature", { timeout: 6000 });
+    await page.locator(TREE).focus();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    const hunk = page.getByTestId("viewer").getByText("@@ -1,9 +1,12 @@");
+    await expect(hunk).toBeVisible();
+
+    await page.keyboard.press(`${MOD}+1`);
+    await page.getByTestId("new-session").click();
+    await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
+    await expect(page.getByTestId("mode-readout")).toHaveText("working");
+    await expect(page.locator(CHANGES)).not.toContainText("worktree feature");
+    await expect(hunk).toHaveCount(0);
+
+    await page.locator("[data-testid='session-row']").first().click();
+    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(hunk).toBeVisible();
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+  });
+
   // Opening the sessions pane for real closes the viewer, but the document
   // is still the session's: switching away and back finds it open.
   test("brings a viewer back that opening the sessions pane had closed", async ({
