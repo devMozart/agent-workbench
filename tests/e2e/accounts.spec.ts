@@ -143,6 +143,7 @@ test.describe("starting a session under an account", () => {
     await expect.poll(() => spawns(page)).toHaveLength(1);
     expect((await spawns(page))[0].agent).toBe("claude-code");
     expect((await spawns(page))[0].configDir).toBe("~/.claude-work");
+    await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
 
     // Switched in the account control, for this one session only.
     await page.getByTestId("new-session").click();
@@ -152,6 +153,7 @@ test.describe("starting a session under an account", () => {
     await page.getByTestId("agent-option").click();
     await expect.poll(() => spawns(page)).toHaveLength(2);
     expect((await spawns(page))[1].configDir).toBeUndefined();
+    await expect(page.getByTestId("account-readout")).toHaveText("account: Default");
     await page.getByTestId("new-session").click();
     await expect(
       page.locator('[data-testid="account-option"][data-account="Work"]'),

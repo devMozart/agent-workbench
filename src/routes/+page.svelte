@@ -52,6 +52,7 @@
     toggleView,
   } from "$lib/files.svelte";
   import {
+    activeSession,
     cycle as cycleSession,
     ended as sessionEnded,
     exact,
@@ -64,6 +65,7 @@
     unreadCount,
     viewed,
   } from "$lib/sessions.svelte";
+  import { accountLabel, hasAccounts } from "$lib/accounts.svelte";
   import { attention, badge, followFocus } from "$lib/attention.svelte";
   import { primeChime } from "$lib/chime";
   import { announce } from "$lib/notify.svelte";
@@ -601,6 +603,13 @@
 <footer class="status no-select">
   <span class="focus" data-testid="focus-readout">focus: {layout.focus}</span>
   <span class="mode" data-testid="mode-readout">{layout.mode}</span>
+  <!-- Whose login the active session runs under, once there are accounts
+       to tell apart. -->
+  {#if hasAccounts() && activeSession() !== null}
+    <span class="account" data-testid="account-readout"
+      >account: {accountLabel(activeSession()?.account ?? null)}</span
+    >
+  {/if}
   {#if unreadCount() > 0}
     <span class="waiting" data-testid="waiting-readout">
       {unreadCount()} waiting for you
@@ -766,7 +775,8 @@
     color: var(--accent);
   }
 
-  .mode {
+  .mode,
+  .account {
     color: var(--ink-3);
   }
 

@@ -109,7 +109,9 @@ account marked; a click on another, or Left and Right at the keyboard,
 switches it for this one session, and the next choice starts on the
 project's account again. A session an orchestrator
 starts runs under the project's account unless the start names another,
-and a session resumed runs under the account it ran under.
+and a session resumed runs under the account it ran under. The status bar
+names the account the active session runs under, Default included, as
+long as there are accounts to tell apart.
 
 The past sessions under a project are the ones its account has had there,
 read from that account's directory. A session started under another
