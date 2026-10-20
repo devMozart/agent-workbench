@@ -272,7 +272,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(delegated.kind, "delegated");
-        assert_eq!(delegated.note.as_deref(), Some("Reviewing in the background."));
+        assert_eq!(
+            delegated.note.as_deref(),
+            Some("Reviewing in the background.")
+        );
         assert_eq!(
             event(
                 r#"{"session_id":"s1","hook_event_name":"Stop","background_tasks":[{"id":"b1","type":"shell","status":"running","description":"dev server","command":"npm run dev"}]}"#
