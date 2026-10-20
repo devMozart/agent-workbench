@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  notified,
   projectFor,
   referenced,
   relativeTo,
@@ -15,6 +16,7 @@ import {
   located,
   reset as resetSessions,
   select,
+  sessions,
   started,
 } from "$lib/sessions.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
@@ -266,6 +268,32 @@ describe("a call from a session the user is not looking at", () => {
     await showRequested(place("s9"));
     expect(shown).toEqual([["src/a.rs", 3, 5, "Here."]]);
     expect(workspace.active).toBe("/one");
+  });
+
+  // A session the workbench started was told its id, so a request naming
+  // none is not from it: an agent run by hand in the project's directory
+  // has the same tools, and its line belongs on no row.
+  it("places a nameless call only on a session that was not told its id", async () => {
+    workspace.open.push(repo("/one"));
+    workspace.active = "/one";
+    const a = create("/one");
+    started(a.key, "pty-1", "s1");
+    const b = create("/one");
+    started(b.key, "pty-2", "s2");
+    select(b.key);
+    notified({ text: "Merged and verified", cwd: "/one", session: null });
+    expect(sessions.all.map((session) => session.note)).toEqual([null, null]);
+    await showRequested({ ...place("s9"), session: null });
+    expect(shown).toEqual([["src/a.rs", 3, 5, "Here."]]);
+    // An agent that mints its own id was told none: the call is its.
+    const c = create("/one", null, "codex");
+    started(c.key, "pty-3", null);
+    notified({ text: "Tests green", cwd: "/one", session: null });
+    expect(sessions.all.map((session) => session.note)).toEqual([
+      null,
+      null,
+      "Tests green",
+    ]);
   });
 
   it("drops what a closed session held", async () => {

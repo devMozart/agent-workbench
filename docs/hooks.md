@@ -126,7 +126,9 @@ agent is told to run its own commands itself.
 marks the row as wanting attention, unless the user is already looking at
 that session: why the agent stopped, what it needs, what is done. The row
 has room for a few words on one line and cuts the rest off, which the agent
-is told. Looking at the session clears it. The agent is told to call it in
+is told. Looking at the session clears it. A line from an agent run by
+hand in the project's directory, which has the same tools but no row of
+its own, goes nowhere. The agent is told to call it in
 every turn it hands back, just before its final message rather than after
 it. What an agent writes before a tool call is folded into one line on
 screen, whatever the call is, and only the message after the last call of

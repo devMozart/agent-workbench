@@ -98,6 +98,10 @@ export interface Session {
   error: string | null;
   /** Set once the terminal has been created, so it is only built once. */
   mounted: boolean;
+  /** Whether the agent was given the session's id in its environment, so
+      every tool call it makes names the session. An agent that mints its
+      own id was not, and its calls are placed by where it runs. */
+  told: boolean;
 }
 
 const MINE_KEY = "workbench.mine";
@@ -656,6 +660,7 @@ function row(
     exitCode: null,
     error: null,
     mounted: false,
+    told: false,
   };
 }
 
@@ -726,6 +731,7 @@ export function started(
   session.ptyId = ptyId;
   session.startedAt = Date.now();
   session.status = "running";
+  session.told = sessionId !== null;
   if (sessionId !== null) {
     session.id = sessionId;
     adopt(session.project, sessionId);

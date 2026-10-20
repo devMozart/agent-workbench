@@ -128,7 +128,10 @@ export function terminalRequested(request: TerminalRequest) {
 }
 
 /** The session a request is from: the one it names, else the one running
-    deepest where the agent runs, else the project's active one. */
+    deepest where the agent runs, else the project's active one. A request
+    that names no session cannot be from a session whose agent was told its
+    id, so those are passed over: an agent started outside the workbench in
+    the project's directory, with the same tools, is not one of its rows. */
 export function sessionFor(
   request: { cwd: string; session: string | null },
   project: string,
@@ -138,16 +141,19 @@ export function sessionFor(
     (session) => session.id !== null && session.id === request.session,
   );
   if (named !== undefined) return named;
+  const could = own.filter(
+    (session) => request.session !== null || !session.told,
+  );
   const at = (session: {
     cwd: string | null;
     startIn: string | null;
     project: string;
   }) => session.cwd ?? session.startIn ?? session.project;
-  const under = own
+  const under = could
     .filter((session) => within(request.cwd, at(session)))
     .sort((a, b) => at(b).length - at(a).length);
   if (under.length > 0) return under[0];
-  return own.find((session) => session.key === sessions.active) ?? null;
+  return could.find((session) => session.key === sessions.active) ?? null;
 }
 
 /** What each session's agent asked to open while the user was looking at
