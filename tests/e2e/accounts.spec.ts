@@ -176,3 +176,44 @@ test.describe("starting a session under an account", () => {
     expect((await spawns(page))[0].configDir).toBe("~/.claude-work");
   });
 });
+
+test.describe("a past session under another account", () => {
+  test("is listed under its project, and resumes under that account", async ({
+    page,
+  }) => {
+    // The project runs on the agents' own directory; the session ran
+    // under Work, so Work's directory is where its transcript is.
+    await installFakeCore(page, {
+      open: [PROJECT],
+      settings: { accounts: { ...WORK, overrides: {} } },
+      transcripts: [
+        {
+          id: "work-1",
+          modified: Math.floor(Date.now() / 1000) - 60,
+          size: 100,
+          title: "under work",
+          configDir: "~/.claude-work",
+        },
+      ],
+    });
+    await page.addInitScript(
+      ({ project }) => {
+        localStorage.setItem("workbench.mine", JSON.stringify({ [project]: ["work-1"] }));
+      },
+      { project: PROJECT },
+    );
+    await page.goto("/");
+    await expect(page.locator(AGENT)).toBeVisible();
+
+    const past = page.getByTestId("past-session");
+    await expect(past).toHaveCount(1);
+    await expect(past).toContainText("under work");
+    await expect(past.getByTestId("past-account")).toHaveText("Work");
+
+    await past.click();
+    await expect.poll(() => spawns(page)).toHaveLength(1);
+    expect((await spawns(page))[0].session).toBe("work-1");
+    expect((await spawns(page))[0].configDir).toBe("~/.claude-work");
+    await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
+  });
+});

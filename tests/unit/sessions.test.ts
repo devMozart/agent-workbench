@@ -3,6 +3,7 @@ import type { Transcript } from "$lib/core";
 import { applyDetect, resetAgent } from "$lib/agent.svelte";
 import { stash } from "$lib/exits";
 import { attention, resetAttention } from "$lib/attention.svelte";
+import { adoptAccounts, reset as resetAccounts } from "$lib/accounts.svelte";
 import {
   activeSession,
   adoptPastSessions,
@@ -65,6 +66,8 @@ const B = "/home/ada/dev/two";
 const killed: string[] = [];
 let historyReads = 0;
 let historyAnswer: Transcript[] = [];
+/** What each account's directory holds, by directory. */
+let historyByDir: Record<string, Transcript[]> = {};
 let cwdAnswer: string | null = null;
 let cwdAsks = 0;
 vi.mock("$lib/core", () => ({
@@ -85,10 +88,13 @@ vi.mock("$lib/core", () => ({
         : path;
       return { path, name: path, repository, isGit: true };
     },
-    // Every agent is asked; the count follows one of them.
-    transcripts: async (_project: string, agent: string) => {
-      if (agent === "claude-code") historyReads += 1;
-      return agent === "claude-code" ? historyAnswer : [];
+    // Every agent is asked, in the agents' own directory and in each
+    // account's; the count follows one agent's own.
+    transcripts: async (_project: string, agent: string, dir?: string) => {
+      if (agent !== "claude-code") return [];
+      if (dir !== undefined) return historyByDir[dir] ?? [];
+      historyReads += 1;
+      return historyAnswer;
     },
   }),
 }));
@@ -96,9 +102,11 @@ vi.mock("$lib/core", () => ({
 beforeEach(() => {
   reset();
   resetAttention();
+  resetAccounts();
   killed.length = 0;
   historyReads = 0;
   historyAnswer = [];
+  historyByDir = {};
   cwdAnswer = null;
   cwdAsks = 0;
   resetAgent();
@@ -437,6 +445,7 @@ describe("history", () => {
     modified,
     size: 100,
     agent: "claude-code" as const,
+    account: null,
   });
 
   it("lists what the core reported for the project, once it is ours", () => {
@@ -470,6 +479,30 @@ describe("history", () => {
       ["same", "newer copy"],
       ["other", "other"],
     ]);
+  });
+
+  // A session run under another account is kept in that account's
+  // directory. It is listed under its project all the same, tagged with
+  // the account, and a row resumed from it runs under that account.
+  it("lists the sessions of every account, each under its own", async () => {
+    adoptAccounts({
+      list: { Work: { claude: "~/.claude-work", codex: null } },
+      everywhere: null,
+      overrides: {},
+    });
+    historyAnswer = [{ id: "own", title: "own", modified: 1000, size: 1, cwd: null }];
+    historyByDir["~/.claude-work"] = [
+      { id: "work", title: "work", modified: 2000, size: 1, cwd: null },
+    ];
+    await loadHistory(A);
+    expect(outsideFor(A).map((t) => [t.id, t.account])).toEqual([
+      ["work", "Work"],
+      ["own", null],
+    ]);
+
+    const [work] = outsideFor(A);
+    const session = create(A, work.id, work.agent, null, null, null, work.account);
+    expect(session.account).toBe("Work");
   });
 
   // Claude Code run in a terminal in the same directory leaves transcripts in
@@ -690,6 +723,7 @@ describe("titles", () => {
         modified: 1000,
         size: 1,
         agent: "claude-code",
+        account: null,
       },
     ];
     expect(historyLabel(sessions.history[A][0])).toBe(
@@ -1289,6 +1323,7 @@ describe("how long past sessions stay listed", () => {
     modified,
     size: 100,
     agent: "claude-code" as const,
+    account: null,
   });
 
   function ours(...ids: string[]) {

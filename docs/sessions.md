@@ -148,10 +148,10 @@ and a session resumed runs under the account it ran under. The status bar
 names the account the active session runs under, Default included, as
 long as there are accounts to tell apart.
 
-The past sessions under a project are the ones its account has had there,
-read from that account's directory. A session started under another
-account is listed where that account keeps it, which is to say under the
-project once the project is moved to that account.
+The past sessions under a project are read from every account's
+directory, so a session started under another account is listed under its
+project like the rest, with the account's name as a tag, and resumes under
+that account.
 
 ## Names
 

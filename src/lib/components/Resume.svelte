@@ -109,6 +109,7 @@
           >
             <span class="label">{historyLabel(entry)}</span>
             {#if entry.cwd}<span class="where" title={entry.cwd} data-testid="session-where">{lastSegment(entry.cwd)}</span>{/if}
+            {#if entry.account !== null}<span class="where" title="account: {entry.account}" data-testid="resume-account">{entry.account}</span>{/if}
             <span class="state">{ago(entry.modified)}</span>
           </button>
         {:else}

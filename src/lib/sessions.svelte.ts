@@ -7,7 +7,7 @@ import {
   type Settings,
   type Transcript,
 } from "$lib/core";
-import { accountOf, dirFor } from "$lib/accounts.svelte";
+import { accountOf, dirFor, names } from "$lib/accounts.svelte";
 import { persist } from "$lib/persist";
 import { AGENTS, installed } from "$lib/agent.svelte";
 import { attention } from "$lib/attention.svelte";
@@ -111,8 +111,10 @@ const MINE_KEY = "workbench.mine";
 const NAMES_KEY = "workbench.names";
 const PREFERRED_KEY = "workbench.agents";
 
-/** A past session, and whose it is. */
-export type HistoryEntry = Transcript & { agent: AgentId };
+/** A past session, whose it is, and the account it ran under: the name
+    of the account whose directory holds it, or null for the agents' own.
+    It resumes under that account. */
+export type HistoryEntry = Transcript & { agent: AgentId; account: string | null };
 
 export const sessions = $state({
   all: [] as Session[],
@@ -198,12 +200,30 @@ function pruneDormant(project: string | null = null) {
   }
 }
 
+/** The directories a project's history is read from: every account's,
+    for each agent, the agents' own included. An account that leaves an
+    agent on its own directory is that directory, read once as the agents'
+    own. */
+function historySources(): { agent: AgentId; account: string | null; dir?: string }[] {
+  const sources: { agent: AgentId; account: string | null; dir?: string }[] = [];
+  for (const agent of AGENTS) {
+    sources.push({ agent, account: null });
+    for (const account of names()) {
+      const dir = dirFor(account, agent);
+      if (dir !== undefined) sources.push({ agent, account, dir });
+    }
+  }
+  return sources;
+}
+
+/** Reads the project's past sessions from every account's directory, so a
+    session run under any account is listed under its project. */
 export async function loadHistory(project: string) {
   const lists = await Promise.all(
-    AGENTS.map((agent) =>
+    historySources().map(({ agent, account, dir }) =>
       core()
-        .transcripts(project, agent, dirFor(accountOf(project), agent))
-        .then((list) => list.map((transcript) => ({ ...transcript, agent })))
+        .transcripts(project, agent, dir)
+        .then((list) => list.map((transcript) => ({ ...transcript, agent, account })))
         // No history is a shorter list, never an error.
         .catch(() => [] as HistoryEntry[]),
     ),

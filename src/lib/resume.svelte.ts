@@ -4,7 +4,8 @@
  * Under a project sit the sessions this app ran; the rest, everything the
  * agent ran there from anywhere, can be many, so they are behind one row
  * that opens a dialog with a filter over them. Picking one starts it as a
- * live session, in the worktree it ran in when it had one.
+ * live session, in the worktree it ran in when it had one, under the
+ * account it ran under.
  */
 
 import type { AgentId } from "$lib/core";
@@ -62,7 +63,7 @@ export function offered(): HistoryEntry[] {
 /** Starts the session as a live one and closes. */
 export function pickResume(entry: HistoryEntry) {
   if (resume.project === null) return;
-  create(resume.project, entry.id, entry.agent, entry.cwd ?? null);
+  create(resume.project, entry.id, entry.agent, entry.cwd ?? null, null, null, entry.account);
   closeResume();
   focusPane("agent");
 }

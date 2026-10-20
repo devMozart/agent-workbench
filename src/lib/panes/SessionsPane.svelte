@@ -257,7 +257,7 @@
     for (const transcript of historyFor(path)) {
       out.push({
         id: `past:${transcript.id}`,
-        run: () => resume(path, transcript.id, transcript.agent, transcript.cwd ?? null),
+        run: () => resume(path, transcript),
       });
     }
     out.push(...starting(path));
@@ -344,9 +344,10 @@
     focusPane("agent");
   }
 
-  /** A past session resumes where it ran: in its worktree when it had one. */
-  function resume(path: string, id: string, agent: AgentId, cwd: string | null = null) {
-    create(path, id, agent, cwd);
+  /** A past session resumes where it ran: in its worktree when it had
+      one, and under the account it ran under. */
+  function resume(path: string, transcript: HistoryEntry) {
+    create(path, transcript.id, transcript.agent, transcript.cwd ?? null, null, null, transcript.account);
     focusPane("agent");
   }
 
@@ -552,7 +553,7 @@
       <button
         class="row past"
         tabindex="-1"
-        onclick={() => resume(path, transcript.id, transcript.agent, transcript.cwd ?? null)}
+        onclick={() => resume(path, transcript)}
         disabled={!isReady()}
         title={transcript.title ?? transcript.id}
         data-testid="past-session"
@@ -560,6 +561,7 @@
         <span class="dot"></span>
         <span class="label">{historyLabel(transcript)}</span>
         {#if transcript.cwd}<span class="tag where" title={transcript.cwd} data-testid="session-where">{lastSegment(transcript.cwd)}</span>{/if}
+        {#if transcript.account !== null}<span class="tag account" data-testid="past-account">{transcript.account}</span>{/if}
         {#if several}<span class="tag">{agentTag(transcript.agent)}</span>{/if}
         <span class="state">{ago(transcript.modified)}</span>
       </button>

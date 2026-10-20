@@ -66,8 +66,15 @@ export async function installFakeCore(
     settings?: Record<string, unknown>;
     /** A stylesheet of the user's already on the machine. */
     styles?: string;
-    /** Past Claude Code sessions the core reports for the first project. */
-    transcripts?: { id: string; modified: number; size: number; title: string | null }[];
+    /** Past Claude Code sessions the core reports for the first project,
+        each from the agent's own directory unless it names an account's. */
+    transcripts?: {
+      id: string;
+      modified: number;
+      size: number;
+      title: string | null;
+      configDir?: string;
+    }[];
   } = {},
 ) {
   await page.addInitScript(
@@ -969,8 +976,10 @@ export async function installFakeCore(
           return JSON.stringify({ ran: script.length > 0, url: tab.url });
         },
 
-        transcripts: async (project: string, agent: string) =>
-          project === open[0] && agent === "claude-code" ? transcripts : [],
+        transcripts: async (project: string, agent: string, configDir?: string) =>
+          project === open[0] && agent === "claude-code"
+            ? transcripts.filter((transcript) => transcript.configDir === configDir)
+            : [],
         sessionTitle: async () => null,
         hookStatus: async () => ({
           installed: false,
