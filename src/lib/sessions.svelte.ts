@@ -94,6 +94,9 @@ export interface Session {
   exact: boolean;
   /** What the agent is blocked on, when its hooks say so. */
   needs: "permission" | null;
+  /** When the row last changed what it says: started working, went quiet,
+      asked, was looked at, ended. The status view sorts by it. */
+  changedAt: number;
   exitCode: number | null;
   error: string | null;
   /** Set once the terminal has been created, so it is only built once. */
@@ -619,7 +622,9 @@ export function reopened(
     from here it is a resumed session like any other. */
 export function wake(key: string) {
   const session = byKey(key);
-  if (session?.status === "dormant") session.status = "starting";
+  if (session?.status !== "dormant") return;
+  session.status = "starting";
+  changed(session);
 }
 
 function row(
@@ -657,11 +662,17 @@ function row(
     note: null,
     exact: false,
     needs: null,
+    changedAt: Date.now(),
     exitCode: null,
     error: null,
     mounted: false,
     told: false,
   };
+}
+
+/** The row changed what it says, now. */
+function changed(session: Session) {
+  session.changedAt = Date.now();
 }
 
 function added(session: Session): Session {
@@ -732,6 +743,7 @@ export function started(
   session.startedAt = Date.now();
   session.status = "running";
   session.told = sessionId !== null;
+  changed(session);
   if (sessionId !== null) {
     session.id = sessionId;
     adopt(session.project, sessionId);
@@ -749,6 +761,7 @@ export function failed(key: string, error: string) {
   session.ptyId = null;
   session.status = "failed";
   session.error = String(error);
+  changed(session);
 }
 
 /**
@@ -769,6 +782,7 @@ export function ended(event: SessionEnded): boolean {
   session.status = event.clean ? "exited" : "crashed";
   // An ending is something to see too, and not a thing still working.
   session.working = false;
+  changed(session);
   unseen(session);
   // The transcript is complete now, so the history it belongs in has moved.
   loadHistory(session.project);
@@ -954,12 +968,14 @@ export function output(key: string, bytes: number, now = Date.now()) {
     if (session.needs !== null && work) {
       session.needs = null;
       session.working = true;
+      changed(session);
     }
     if (session.agent !== "codex" && session.working && work) stillLater(session);
     return;
   }
   if (work && pulse.run >= WORK_WINDOWS - 1 && !session.working) {
     session.working = true;
+    changed(session);
   }
   if (!work) return;
   if (pulse.quiet !== null) clearTimeout(pulse.quiet);
@@ -997,6 +1013,7 @@ function stillLater(session: Session) {
       const now = byKey(session.key);
       if (now === null || !now.exact || !now.working) return;
       now.working = false;
+      changed(now);
       unseen(now);
     }, QUIET_EXACT_MS),
   );
@@ -1015,6 +1032,7 @@ function settle(key: string) {
   }
   if (session === null || !session.working) return;
   session.working = false;
+  changed(session);
   unseen(session);
 }
 
@@ -1033,7 +1051,9 @@ function unseen(session: Session, asking = false) {
   if (isViewed(session)) return;
   const news = asking || !session.unread;
   session.unread = true;
-  if (news) waiting?.(session);
+  if (!news) return;
+  changed(session);
+  waiting?.(session);
 }
 
 /** The agent rang the bell, or sent a notification: it wants the user,
@@ -1049,6 +1069,7 @@ export function rang(key: string) {
 export function viewed(key: string) {
   const session = byKey(key);
   if (session === null) return;
+  if (session.unread) changed(session);
   session.unread = false;
   session.note = null;
 }
@@ -1109,10 +1130,12 @@ export function exact(
       session.unread = false;
       // A new turn: whatever line the last one left is stale.
       session.note = null;
+      changed(session);
       break;
     case "stop":
       session.working = false;
       session.needs = null;
+      changed(session);
       if (session.note === null && note !== null) session.note = note;
       unseen(session);
       break;
@@ -1120,6 +1143,7 @@ export function exact(
       const asking = session.needs !== "permission";
       session.working = false;
       session.needs = "permission";
+      if (asking) changed(session);
       unseen(session, asking);
       break;
     }
@@ -1132,6 +1156,44 @@ export function exact(
 /** How many sessions are waiting for the user. */
 export function unreadCount(): number {
   return sessions.all.filter((session) => session.unread).length;
+}
+
+/**
+ * The status view's groups, in the order the pane draws them. A session
+ * needs you when it is asking, or stopped, ended or rang while nobody was
+ * looking; it is working while its dot breathes, which for an orchestrator
+ * may be a started session's work, so the caller says what at work is;
+ * the rest are active, which is live and idle, or dormant.
+ */
+export type StatusGroup = "needs" | "working" | "active";
+
+export const STATUS_GROUPS: { id: StatusGroup; title: string }[] = [
+  { id: "needs", title: "Needs you" },
+  { id: "working", title: "Working" },
+  { id: "active", title: "Active" },
+];
+
+export function groupOf(
+  session: Session,
+  atWork: (session: Session) => boolean = (candidate) => candidate.working,
+): StatusGroup {
+  if (session.unread || session.needs === "permission") return "needs";
+  if (isLive(session) && atWork(session)) return "working";
+  return "active";
+}
+
+/** Every row, grouped by status and sorted within each group by when the
+    row last changed, the latest first. A group with nothing in it is left
+    out. */
+export function byStatus(
+  atWork?: (session: Session) => boolean,
+): { id: StatusGroup; title: string; sessions: Session[] }[] {
+  return STATUS_GROUPS.map((group) => ({
+    ...group,
+    sessions: sessions.all
+      .filter((session) => groupOf(session, atWork) === group.id)
+      .sort((a, b) => b.changedAt - a.changedAt),
+  })).filter((group) => group.sessions.length > 0);
 }
 
 /** Test seam: the counter is module state and rows outlive a component. */

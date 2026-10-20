@@ -121,6 +121,9 @@ export const layout = $state({
   /** A plugin's section, by source, plugin and section: open rather than
       folded. Absent is folded, which is how one first appears. */
   sectionsOpen: {} as Record<string, boolean>,
+  /** How the sessions pane lists sessions: under their projects, or in
+      groups by what they are doing, across projects. */
+  sessionsView: "project" as SessionsView,
   mode: "working" as Mode,
   focus: "agent" as PaneId,
   /** Counts every request to focus a pane by key, so a pane that already
@@ -132,6 +135,8 @@ export const layout = $state({
       traffic lights off the header. */
   fullScreen: false,
 });
+
+export type SessionsView = "project" | "status";
 
 export function sessionsVisible() {
   return layout.sessionsChosen && !layout.sessionsForced;
@@ -365,6 +370,13 @@ export function togglePane(pane: "sessions" | "changes") {
   saveLayout();
 }
 
+/** Lists the sessions pane one way or the other, and remembers which. */
+export function setSessionsView(view: SessionsView) {
+  if (layout.sessionsView === view) return;
+  layout.sessionsView = view;
+  saveLayout();
+}
+
 /**
  * Shows or hides the terminal. Showing it is asking for it, so focus goes
  * there; hiding it hands focus back to the agent, which is where a chord
@@ -450,6 +462,8 @@ export function loadLayout() {
       }
       layout.sectionsOpen = open;
     }
+    if (v.sessionsView === "project" || v.sessionsView === "status")
+      layout.sessionsView = v.sessionsView;
     if (typeof v.sessionsChosen === "boolean")
       layout.sessionsChosen = v.sessionsChosen;
     if (typeof v.changesChosen === "boolean")
@@ -483,6 +497,7 @@ export function saveLayout() {
         processesOpen: layout.processesOpen,
         browserOpen: layout.browserOpen,
         sectionsOpen: layout.sectionsOpen,
+        sessionsView: layout.sessionsView,
         sessionsChosen: layout.sessionsChosen,
         changesChosen: layout.changesChosen,
         terminalChosen: layout.terminalChosen,

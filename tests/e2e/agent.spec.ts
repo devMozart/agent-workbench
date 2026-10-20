@@ -1019,6 +1019,49 @@ test.describe("several projects", () => {
     await expect(page.getByTestId("switch-confirm")).toHaveCount(0);
   });
 
+  // By status, the sessions of both projects are one list: the one that
+  // needs you on top, each row naming its project, the projects under
+  // them, and the choice kept across a restart.
+  test("lists sessions by status across projects, and remembers the view", async ({
+    page,
+  }) => {
+    await running(page);
+    await page.locator(SESSIONS).getByText("two", { exact: true }).click();
+    await page.getByTestId("new-session").click();
+    await expect(rows(page)).toHaveCount(2);
+
+    await page.getByTestId("view-status").click();
+    await expect(page.getByTestId("status-group")).toHaveCount(1);
+    await expect(page.getByTestId("status-group")).toHaveAttribute("data-group", "active");
+    // Started last, so changed last: the session in two is on top.
+    await expect(page.getByTestId("session-crumb").first()).toHaveText(/^two/);
+    await expect(page.getByTestId("session-crumb").nth(1)).toHaveText(/^one/);
+    await expect(page.getByTestId("projects-group")).toContainText("Projects 2");
+    // Only the project you are looking at opens under the groups.
+    await expect(page.getByTestId("new-session")).toHaveCount(1);
+
+    // The first rings behind the second: it needs you, and goes to the top.
+    await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
+    const groups = page.getByTestId("status-group");
+    await expect(groups).toHaveCount(2);
+    await expect(groups.first()).toHaveAttribute("data-group", "needs");
+    await expect(groups.first()).toHaveClass(/hot/);
+    await expect(rows(page).first()).toContainText("waiting for you");
+    await expect(page.getByTestId("session-crumb").first()).toHaveText(/^one/);
+
+    // Picking it brings its project forward and reads it.
+    await rows(page).first().click();
+    await expect(groups).toHaveCount(1);
+    await expect(page.locator(SESSIONS).locator(".project.on")).toContainText("one");
+
+    await page.reload();
+    await expect(page.locator(AGENT)).toBeVisible();
+    await expect(page.getByTestId("view-status")).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("status-group")).toHaveCount(1);
+    await page.getByTestId("view-project").click();
+    await expect(page.getByTestId("status-group")).toHaveCount(0);
+  });
+
   test("closing a project stops its sessions and keeps the rest", async ({
     page,
   }) => {

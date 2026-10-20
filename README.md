@@ -105,8 +105,8 @@ npm run test:driver   # the real binary, driven over WebDriver
 - [Layout](docs/layout.md): the two shapes, what gives way when the window
   shrinks, what moves when a pane goes, the tree and what sits under it, the
   terminal panel, the window's chrome.
-- [Sessions](docs/sessions.md): what a session is, what its row says, past
-  sessions, and how the changes pane keeps up.
+- [Sessions](docs/sessions.md): what a session is, what its row says, the
+  list by status, past sessions, and how the changes pane keeps up.
 - [Focus](docs/focus-model.md): who owns the keyboard.
 - [Settings](docs/settings.md): the seven tabs, the appearance and the look,
   fonts and colours, live updates, past sessions, accounts, plugins, keys.

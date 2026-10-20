@@ -145,7 +145,7 @@ export function foldLabel(group: Group): string {
 }
 
 /** What an orchestrator is called where its own row is not in sight. */
-function conductorLabel(id: string): string {
+export function conductorLabel(id: string): string {
   const session = sessions.all.find(
     (candidate) => candidate.id === id || candidate.key === id,
   );

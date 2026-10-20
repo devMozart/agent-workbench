@@ -129,6 +129,7 @@ beforeEach(() => {
   layout.mode = "working";
   layout.focus = "agent";
   layout.width = 1600;
+  layout.sessionsView = "project";
 
   files.scope = "changed";
   files.view = "diff";
@@ -515,9 +516,127 @@ describe("SessionsPane", () => {
     expect(remote.open).toBe(true);
     expect(screen.queryByTestId("sessions-menu-items")).toBeNull();
 
+    // The view switch is next, and Right and Left flip it in place.
+    await fireEvent.keyDown(nav, { key: "ArrowDown" });
+    expect(screen.getByTestId("view-switch")).toHaveClass("cursor");
+    await fireEvent.keyDown(nav, { key: "ArrowRight" });
+    expect(layout.sessionsView).toBe("status");
+    await fireEvent.keyDown(nav, { key: "ArrowLeft" });
+    expect(layout.sessionsView).toBe("project");
+
     await fireEvent.keyDown(nav, { key: "ArrowDown" });
     await fireEvent.keyDown(nav, { key: "Delete" });
     expect(workspace.open.map((project) => project.path)).toEqual(["/other"]);
+  });
+
+  // By status, every session is one list across the projects: the ones
+  // that need you first, then the working, then the rest, each with its
+  // project under the name, and the projects themselves under the groups.
+  it("lists sessions by status across projects, each saying where it belongs", async () => {
+    workspace.open.push(repo("/work/app", "app"), repo("/spike/app", "app"));
+    workspace.active = "/work/app";
+    const idle = create("/work/app");
+    started(idle.key, "pty-1", "session-1");
+    const busy = create("/spike/app");
+    started(busy.key, "pty-2", "session-2");
+    busy.working = true;
+    busy.changedAt = idle.changedAt + 1;
+    const asking = create("/spike/app");
+    started(asking.key, "pty-3", "session-3");
+    asking.needs = "permission";
+    asking.unread = true;
+    asking.note = "Allow npm test?";
+    asking.changedAt = idle.changedAt + 2;
+    fake.transcripts = [{ id: "old-1", title: "yesterday", modified: 1000, size: 10 }];
+    localStorage.setItem("workbench.mine", JSON.stringify({ "/work/app": ["old-1"] }));
+    loadRemembered();
+    layout.sessionsView = "status";
+
+    render(SessionsPane);
+    await waitFor(() => expect(screen.getByTestId("past-session")).toBeInTheDocument());
+
+    const groups = screen.getAllByTestId("status-group");
+    expect(groups.map((group) => group.dataset.group)).toEqual(["needs", "working", "active"]);
+    expect(groups[0]).toHaveTextContent("Needs you 1");
+    expect(groups[0]).toHaveClass("hot");
+
+    const rows = screen.getAllByTestId("session-row");
+    expect(rows.map((row) => row.querySelector(".label")!.textContent)).toEqual([
+      "session 2",
+      "session 1",
+      "session 1",
+    ]);
+    const crumbs = screen.getAllByTestId("session-crumb");
+    expect(crumbs[0]).toHaveTextContent(/^spike\/app\s*·\s*Allow npm test\?$/);
+    expect(crumbs[1]).toHaveTextContent("spike/app");
+    expect(crumbs[2]).toHaveTextContent("work/app");
+    expect(rows[0].querySelector(".dot")).toHaveClass("permission");
+    expect(screen.getAllByTestId("session-when")[0]).toHaveTextContent("just now");
+
+    // The projects follow, and only the one you are looking at opens.
+    expect(screen.getByTestId("projects-group")).toHaveTextContent("Projects 2");
+    expect(screen.getByTestId("new-session")).toBeInTheDocument();
+    expect(screen.getByTestId("past-session")).toHaveTextContent("yesterday");
+    const names = screen.getAllByText(/app$/, { selector: ".name" });
+    expect(names.map((name) => name.textContent)).toEqual(["work/app", "spike/app"]);
+
+    // Picking a row under the other project brings that project forward.
+    await fireEvent.click(rows[0]);
+    expect(workspace.active).toBe("/spike/app");
+    expect(sessions.active).toBe(asking.key);
+  });
+
+  it("walks the status view in the order drawn, groups first and the projects after", async () => {
+    workspace.open.push(repo("/one", "one"), repo("/two", "two"));
+    workspace.active = "/one";
+    const mine = create("/one");
+    started(mine.key, "pty-1", "session-1");
+    const theirs = create("/two");
+    started(theirs.key, "pty-2", "session-2");
+    theirs.unread = true;
+    theirs.changedAt = mine.changedAt + 1;
+    layout.sessionsView = "status";
+    layout.focus = "sessions";
+
+    render(SessionsPane);
+    const nav = screen.getByTestId("sessions-nav");
+    await waitFor(() => expect(document.activeElement).toBe(nav));
+
+    const at = () => nav.querySelector(".cursor")?.getAttribute("data-row");
+    await fireEvent.keyDown(nav, { key: "Home" });
+    await fireEvent.keyDown(nav, { key: "ArrowDown" });
+    await fireEvent.keyDown(nav, { key: "ArrowDown" });
+    expect(at()).toBe("view");
+    await fireEvent.keyDown(nav, { key: "ArrowDown" });
+    expect(at()).toBe(`session:${theirs.key}`);
+    await fireEvent.keyDown(nav, { key: "ArrowDown" });
+    expect(at()).toBe(`session:${mine.key}`);
+    await fireEvent.keyDown(nav, { key: "ArrowDown" });
+    expect(at()).toBe("project:/one");
+    await fireEvent.keyDown(nav, { key: "ArrowDown" });
+    expect(at()).toBe("new:/one");
+    await fireEvent.keyDown(nav, { key: "ArrowDown" });
+    expect(at()).toBe("project:/two");
+    await fireEvent.keyDown(nav, { key: "End" });
+    expect(at()).toBe("project:/two");
+  });
+
+  it("switches the view with a click, and the tree comes back as it was", async () => {
+    workspace.open.push(repo("/repo", "repo"));
+    workspace.active = "/repo";
+    const only = create("/repo");
+    started(only.key, "pty-1", "session-1");
+
+    render(SessionsPane);
+    expect(screen.queryByTestId("status-group")).toBeNull();
+    await fireEvent.click(screen.getByTestId("view-status"));
+    expect(screen.getByTestId("view-status")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getAllByTestId("status-group")).toHaveLength(1);
+    expect(screen.getByTestId("session-crumb")).toHaveTextContent("repo");
+    await fireEvent.click(screen.getByTestId("view-project"));
+    expect(screen.queryByTestId("status-group")).toBeNull();
+    expect(screen.queryByTestId("session-crumb")).toBeNull();
+    expect(screen.getByTestId("session-row")).toHaveTextContent("session 1");
   });
 
   // A live row's × sits over its end and stops the session, which leaves

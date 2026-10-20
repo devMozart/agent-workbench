@@ -25,6 +25,7 @@ import {
   returnFocus,
   rightmost,
   saveLayout,
+  setSessionsView,
   sessionsShown,
   sessionsVisible,
   terminalVisible,
@@ -52,6 +53,7 @@ function reset() {
   layout.focus = "agent";
   layout.width = 1200;
   layout.height = 800;
+  layout.sessionsView = "project";
 }
 
 beforeEach(reset);
@@ -391,6 +393,20 @@ describe("persistence", () => {
     expect(layout.changes).toBe(420);
     expect(layout.review).toBe(720);
     expect(layout.changesChosen).toBe(false);
+  });
+
+  it("remembers how the sessions are listed, and reads only a view it knows", () => {
+    setSessionsView("status");
+    expect(JSON.parse(localStorage.getItem("workbench.layout")!).sessionsView).toBe("status");
+
+    reset();
+    loadLayout();
+    expect(layout.sessionsView).toBe("status");
+
+    localStorage.setItem("workbench.layout", JSON.stringify({ sessionsView: "sideways" }));
+    reset();
+    loadLayout();
+    expect(layout.sessionsView).toBe("project");
   });
 
   it("does not persist focus", () => {

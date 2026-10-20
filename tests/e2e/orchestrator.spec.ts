@@ -149,11 +149,12 @@ test.describe("the orchestrator", () => {
     await expect(page.getByTestId("started-session")).toHaveCount(0);
 
     // It is a row of the pane's one cursor as much as a thing to click:
-    // the open row, the orchestrator's session, the project, its own
-    // session, and then the fold, which Enter opens.
+    // the open row, the menu, the view switch, the orchestrator's project
+    // and session, the project, its own session, and then the fold, which
+    // Enter opens.
     await page.keyboard.press(`${MOD}+1`);
     await page.keyboard.press("Home");
-    for (let step = 0; step < 6; step += 1) {
+    for (let step = 0; step < 7; step += 1) {
       await page.keyboard.press("ArrowDown");
     }
     await expect(fold).toHaveClass(/cursor/);

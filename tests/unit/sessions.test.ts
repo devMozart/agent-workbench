@@ -35,6 +35,7 @@ import {
   sessionTitle,
   titled,
   byKey,
+  byStatus,
   close,
   closeProject,
   create,
@@ -1197,6 +1198,85 @@ describe("working, and waiting for you", () => {
     expect(() => output("nope", 999)).not.toThrow();
     expect(() => rang("nope")).not.toThrow();
     expect(() => viewed("nope")).not.toThrow();
+  });
+});
+
+describe("by status", () => {
+  it("groups every row by what it is doing, the latest change first, and leaves empty groups out", () => {
+    vi.useFakeTimers();
+    attention.focused = false;
+    try {
+      vi.setSystemTime(1_000_000);
+      const idle = live(A, "pty-idle");
+      vi.setSystemTime(1_001_000);
+      const asking = live(B, "pty-ask");
+      exact("session-pty-ask", "permission");
+      vi.setSystemTime(1_002_000);
+      const busy = live(A, "pty-busy");
+      exact("session-pty-busy", "prompt");
+      vi.setSystemTime(1_003_000);
+      const stopped = live(B, "pty-stop");
+      exact("session-pty-stop", "stop");
+      const dormant = reopened(A, "old-1", "claude-code", null, null, null);
+
+      expect(
+        byStatus().map((group) => [group.id, group.sessions.map((session) => session.key)]),
+      ).toEqual([
+        ["needs", [stopped.key, asking.key]],
+        ["working", [busy.key]],
+        ["active", [dormant.key, idle.key]],
+      ]);
+      expect(byStatus().map((group) => group.title)).toEqual([
+        "Needs you",
+        "Working",
+        "Active",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("moves a row when it is looked at, ends, or asks again, and not otherwise", () => {
+    vi.useFakeTimers();
+    attention.focused = false;
+    try {
+      vi.setSystemTime(1_000_000);
+      const session = live(A, "pty-1");
+      expect(session.changedAt).toBe(1_000_000);
+
+      vi.setSystemTime(1_001_000);
+      exact("session-pty-1", "stop");
+      expect(session.changedAt).toBe(1_001_000);
+      expect(byStatus()[0].id).toBe("needs");
+
+      // Unread already: another stop is no news, and the row stays put.
+      vi.setSystemTime(1_002_000);
+      exact("session-pty-1", "idle");
+      expect(session.changedAt).toBe(1_001_000);
+
+      vi.setSystemTime(1_003_000);
+      select(session.key);
+      viewed(session.key);
+      expect(session.changedAt).toBe(1_003_000);
+      expect(byStatus()[0].id).toBe("active");
+
+      // Read, and nothing happened since: looking again changes nothing.
+      vi.setSystemTime(1_004_000);
+      viewed(session.key);
+      expect(session.changedAt).toBe(1_003_000);
+
+      vi.setSystemTime(1_005_000);
+      ended({ id: "pty-1", code: 0, clean: true });
+      expect(session.changedAt).toBe(1_005_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts an orchestrator as working when the caller says a started session is", () => {
+    const quiet = live(A, "pty-1");
+    expect(byStatus(() => true)[0]).toMatchObject({ id: "working" });
+    expect(byStatus()[0]).toMatchObject({ id: "active", sessions: [quiet] });
   });
 });
 

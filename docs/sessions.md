@@ -32,6 +32,41 @@ on an id that may since have been reused. On shutdown the pty master closes
 with the process and the agent sees SIGHUP. Picking a session that belongs
 to another project brings that project forward.
 
+## By status
+
+The pane lists sessions one of two ways, chosen with the switch under the
+Open project button and kept across restarts. By project is the tree
+described above. By status is every session across the open projects in
+one list, in three groups: **Needs you**, a session asking for a
+permission or one that stopped, ended or rang while nobody was looking;
+**Working**, a session whose dot breathes, which for an orchestrator
+includes a session it started being at work; and **Active**, the rest,
+which is a live session that is idle and read, with the dormant rows
+last. A group with nothing in it is not drawn, and the first takes the
+accent while it has rows.
+
+Within a group the rows are in the order they last changed, the latest
+first, and the time of that change stands at the row's end: a session
+that asked a minute ago is above one that has waited an hour. A change is
+the row starting work, going quiet, asking, being looked at, or ending; a
+row already waiting that stops again has not changed.
+
+No project stands over a row here, so each row says where it belongs on a
+line under its name: the project as the tree labels it, the orchestrator
+that started the session when one did, and the line the agent left, after
+a middle dot. The account and host tags follow the name as they do on the
+project's row. Picking a row brings its project forward, as it does in the
+tree.
+
+The projects themselves sit under the groups, each with its tags and its
+close button, and under the one you are looking at the rows the tree shows
+for it: its past sessions, the new-session row and the fold of sessions
+to resume.
+
+On the keyboard the switch sits on the cursor path after the menu button,
+and Left and Right flip it. Up and Down walk the rows in the order drawn,
+groups first and the projects after.
+
 ## After a restart
 
 The sessions that were open when the app quit come back as rows in their

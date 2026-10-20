@@ -6,6 +6,7 @@
   import {
     ago,
     byKey,
+    byStatus,
     close as closeSession,
     create,
     defaultAgent,
@@ -26,6 +27,7 @@
   import {
     LABEL,
     conducting,
+    conductorLabel,
     conductors,
     foldLabel,
     groupsFor,
@@ -44,6 +46,7 @@
     peekSessions,
     sessionsShown,
     sessionsVisible,
+    setSessionsView,
     type PaneId,
   } from "$lib/layout.svelte";
   import { unfoldSessions } from "$lib/viewers.svelte";
@@ -102,6 +105,29 @@
   /** The folds standing open, by the row id of the fold. A fold is where
       the eye is right now, so nothing about it is remembered. */
   let opened = $state<Record<string, boolean>>({});
+
+  /** The status view's groups: an orchestrator is at work while a session
+      it started is, as its dot says. */
+  let groups = $derived(byStatus(conducting));
+
+  /** The other way of listing, from the switch's row. */
+  function flipView() {
+    setSessionsView(layout.sessionsView === "status" ? "project" : "status");
+  }
+
+  /** The project a session belongs to, as the tree names it. */
+  function whereLabel(session: Session): string {
+    return session.project === orchestrator.dir ? LABEL : projectLabel(session.project);
+  }
+
+  /** The minute the status view's times are read against. */
+  let now = $state(Date.now());
+
+  $effect(() => {
+    if (layout.sessionsView !== "status") return;
+    const timer = setInterval(() => (now = Date.now()), 30_000);
+    return () => clearInterval(timer);
+  });
 
   /** The head's menu, holding the ways in that are not the everyday one. */
   let menuOpen = $state(false);
@@ -176,22 +202,33 @@
     const out: Row[] = [
       { id: "open", run: pick },
       { id: "menu", run: () => (menuOpen = !menuOpen) },
+      { id: "view", run: flipView },
     ];
+    if (layout.sessionsView === "status") {
+      for (const group of groups) {
+        for (const session of group.sessions) {
+          out.push({ id: `session:${session.key}`, run: () => choose(session.key) });
+        }
+      }
+      const dir = pinned;
+      if (dir !== null) {
+        out.push({ id: `project:${dir}`, run: () => activate(dir) });
+        if (workspace.active === dir) out.push(...rest(dir));
+      }
+      for (const project of projects) {
+        const path = project.path;
+        out.push({ id: `project:${path}`, run: () => activate(path) });
+        if (workspace.active === path) out.push(...rest(path));
+      }
+      return out;
+    }
     const dir = pinned;
     if (dir !== null) {
       out.push({ id: `project:${dir}`, run: () => activate(dir) });
       for (const session of conductors()) {
         out.push({ id: `session:${session.key}`, run: () => choose(session.key) });
       }
-      if (workspace.active === dir) {
-        for (const transcript of historyFor(dir)) {
-          out.push({
-            id: `past:${transcript.id}`,
-            run: () => resume(dir, transcript.id, transcript.agent, transcript.cwd ?? null),
-          });
-        }
-        out.push(...starting(dir));
-      }
+      if (workspace.active === dir) out.push(...rest(dir));
     }
     for (const project of projects) {
       const path = project.path;
@@ -207,21 +244,30 @@
           out.push({ id: `session:${session.key}`, run: () => choose(session.key) });
         }
       }
-      if (workspace.active !== path) continue;
-      for (const transcript of historyFor(path)) {
-        out.push({
-          id: `past:${transcript.id}`,
-          run: () => resume(path, transcript.id, transcript.agent, transcript.cwd ?? null),
-        });
-      }
-      out.push(...starting(path));
-      for (const agent of AGENTS) {
-        if (outsideFor(path, agent).length === 0) continue;
-        out.push({ id: `fold:${path}:${agent}`, run: () => openResume(path, agent) });
-      }
+      if (workspace.active === path) out.push(...rest(path));
     }
     return out;
   });
+
+  /** The rows under the project you are looking at, after its sessions:
+      the past ones, the way to a new one, and the folds of sessions from
+      outside. The orchestrator's own project has no outside. */
+  function rest(path: string): Row[] {
+    const out: Row[] = [];
+    for (const transcript of historyFor(path)) {
+      out.push({
+        id: `past:${transcript.id}`,
+        run: () => resume(path, transcript.id, transcript.agent, transcript.cwd ?? null),
+      });
+    }
+    out.push(...starting(path));
+    if (path === orchestrator.dir) return out;
+    for (const agent of AGENTS) {
+      if (outsideFor(path, agent).length === 0) continue;
+      out.push({ id: `fold:${path}:${agent}`, run: () => openResume(path, agent) });
+    }
+    return out;
+  }
 
   /** The rows a project offers for starting a session: the choice of agent
       while it is open, else the new-session row. */
@@ -333,8 +379,9 @@
         break;
       case "ArrowLeft":
       case "ArrowRight":
-        if (choosing === null || !hasAccounts()) return;
-        pickNext(e.key === "ArrowLeft" ? -1 : 1);
+        if (current === "view") flipView();
+        else if (choosing !== null && hasAccounts()) pickNext(e.key === "ArrowLeft" ? -1 : 1);
+        else return;
         break;
       case "Escape":
         // Closes the menu or an open choice of agent, then puts a peeked
@@ -529,6 +576,140 @@
     </div>
 {/snippet}
 
+<!-- A session's row in the status view, where no project stands above it:
+     the name, and under it the project it belongs to, who started it when
+     an orchestrator did, and the line the agent left, with when the row
+     last changed at the end. -->
+{#snippet statusRow(session: Session)}
+  {@const summary = summaryLine(session)}
+  {@const line = summary ?? session.note}
+  {@const by = startedFor(session.key)}
+  <div
+    class="session"
+    class:on={sessions.active === session.key}
+    class:cursor={current === `session:${session.key}`}
+    data-row="session:{session.key}"
+  >
+    <button class="row flush" tabindex="-1" onclick={() => choose(session.key)} data-testid="session-row">
+      <span
+        class="dot"
+        class:live={isLive(session)}
+        class:dormant={session.status === "dormant"}
+        class:working={conducting(session)}
+        class:unread={session.unread}
+        class:permission={session.needs === "permission"}
+        title={statusLabel(session)}
+      ></span>
+      <span class="text">
+        <span class="label" class:unread={session.unread}>{label(session)}</span>
+        <span class="crumb" data-testid="session-crumb">
+          <span class="where">{whereLabel(session)}</span>
+          {#if by !== null}<span class="sep">·</span>{conductorLabel(by)}{/if}
+          {#if line !== null}<span class="sep">·</span><span title={line}>{line}</span>{/if}
+        </span>
+      </span>
+      {#if session.account !== null}<span class="tag account">{session.account}</span>{/if}
+      {#if hostOf(session.project) !== null}<span class="host">{hostOf(session.project)}</span>{/if}
+      {#if several}<span class="tag" data-testid="agent-tag">{agentTag(session.agent)}</span>{/if}
+      <span class="state" data-testid="session-when">{ago(session.changedAt / 1000, now)}</span>
+      <span class="state told">{statusLabel(session)}</span>
+    </button>
+    <span class="actions">
+      <button
+        class="icon"
+        tabindex="-1"
+        onclick={() => closeSession(session.key)}
+        aria-label="Close {label(session)}"
+        title="Stop"
+        data-testid="close-session">×</button
+      >
+    </span>
+  </div>
+{/snippet}
+
+<!-- A project's own row: its name, and what tells it apart. -->
+{#snippet projectRow(project: { path: string; isGit: boolean })}
+  <div
+    class="project"
+    class:on={workspace.active === project.path}
+    class:cursor={current === `project:${project.path}`}
+    data-row="project:{project.path}"
+  >
+    <button class="row project-row" tabindex="-1" onclick={() => activate(project.path)} title={project.path}>
+      <span class="name">{projectLabel(project.path)}</span>
+      {#if accountOf(project.path) !== null}<span class="tag account" data-testid="project-account">{accountOf(project.path)}</span>{/if}
+      {#if hostOf(project.path) !== null}<span class="host" data-testid="project-host">{hostOf(project.path)}</span>{/if}
+      {#if !project.isGit}<span class="flag" title="Not a git repository">no git</span>{/if}
+    </button>
+    <button
+      class="icon"
+      tabindex="-1"
+      onclick={() => closeProject(project.path)}
+      aria-label="Close {projectLabel(project.path)}"
+      data-testid="close-project">×</button
+    >
+  </div>
+{/snippet}
+
+<!-- The orchestrator's own project: nothing closes it. -->
+{#snippet pinnedRow(dir: string)}
+  <div
+    class="project"
+    class:on={workspace.active === dir}
+    class:cursor={current === `project:${dir}`}
+    data-row="project:{dir}"
+  >
+    <button
+      class="row project-row"
+      tabindex="-1"
+      onclick={() => activate(dir)}
+      title={dir}
+      data-testid="orchestrator-project"
+    >
+      <span class="name">{LABEL}</span>
+    </button>
+  </div>
+{/snippet}
+
+<!-- What the project you are looking at offers under its sessions: the
+     past ones, the way to a new one, and the sessions from outside. -->
+{#snippet projectRest(path: string)}
+  {#each historyFor(path) as transcript (transcript.id)}
+    <div class="row-slot" animate:flip={rowMove()} in:rowFade|local out:rowFade|local>
+      {@render pastRow(path, transcript)}
+    </div>
+  {/each}
+
+  {@render newSession(path)}
+
+  <!-- An agent run in a plain terminal here leaves its sessions in the
+       same place. They are resumable, so they are here, one row per
+       agent that opens the list, rather than mixed in with what this
+       window started. -->
+  {#if path !== orchestrator.dir}
+    {#each AGENTS as agent (agent)}
+      {@const outside = outsideFor(path, agent)}
+      {@const fold = `${path}:${agent}`}
+      {#if outside.length > 0}
+        <button
+          class="fold"
+          class:cursor={current === `fold:${fold}`}
+          tabindex="-1"
+          onclick={() => openResume(path, agent)}
+          data-row="fold:{fold}"
+          data-agent={agent}
+          data-testid="outside-fold"
+        >
+          <span class="chevron">▸</span>
+          <span class="fold-text"
+            >{`${outside.length} ${agentTag(agent)} ${outside.length === 1 ? "session" : "sessions"} to resume`}</span
+          >
+        </button>
+      {/if}
+    {/each}
+  {/if}
+{/snippet}
+
 <!-- With several agents, or accounts to run under, the row opens, in
      place, into the choice; with neither there is nothing to choose and it
      starts. -->
@@ -689,186 +870,179 @@
       {/if}
     </div>
   </div>
+  <!-- Under their projects, or in groups by what they are doing: the
+       choice sits on the cursor path, and Left and Right flip it. -->
+  <div
+    class="views"
+    class:cursor={current === "view"}
+    role="radiogroup"
+    aria-label="How sessions are listed"
+    data-row="view"
+    data-testid="view-switch"
+  >
+    <button
+      role="radio"
+      tabindex="-1"
+      aria-checked={layout.sessionsView === "status"}
+      class:on={layout.sessionsView === "status"}
+      onclick={() => setSessionsView("status")}
+      data-testid="view-status">by status</button
+    >
+    <button
+      role="radio"
+      tabindex="-1"
+      aria-checked={layout.sessionsView === "project"}
+      class:on={layout.sessionsView === "project"}
+      onclick={() => setSessionsView("project")}
+      data-testid="view-project">by project</button
+    >
+  </div>
   <div class="tree">
-    <!-- The orchestrator's own project, above the ones you opened: a session
-         that directs others runs here, and starts here like any other. -->
-    {#if pinned !== null}
-      {@const dir = pinned}
-      <div
-        class="project"
-        class:on={workspace.active === dir}
-        class:cursor={current === `project:${dir}`}
-        data-row="project:{dir}"
-      >
-        <button
-          class="row project-row"
-          tabindex="-1"
-          onclick={() => activate(dir)}
-          title={dir}
-          data-testid="orchestrator-project"
-        >
-          <span class="name">{LABEL}</span>
-        </button>
-      </div>
-
-      <!-- Each row is drawn in a slot of its own, which is what fades and
-           what moves: a row that goes leaves the ones below it to close the
-           gap rather than jump into it. -->
-      {#each conductors() as session (session.key)}
-        <div class="row-slot" animate:flip={rowMove()} in:rowFade|local out:rowFade|local>
-          {@render sessionRow(session)}
+    {#if layout.sessionsView === "status"}
+      <!-- Every session across the projects, grouped by what it is doing
+           and the latest change first, with its project on the row. -->
+      {#each groups as group (group.id)}
+        <div class="group" class:hot={group.id === "needs"} data-testid="status-group" data-group={group.id}>
+          <span class="group-title">{group.title}</span>
+          <span class="count">{group.sessions.length}</span>
         </div>
-      {/each}
-
-      {#if workspace.active === dir}
-        {#each historyFor(dir) as transcript (transcript.id)}
+        {#each group.sessions as session (session.key)}
           <div class="row-slot" animate:flip={rowMove()} in:rowFade|local out:rowFade|local>
-            {@render pastRow(dir, transcript)}
+            {@render statusRow(session)}
           </div>
         {/each}
-        {@render newSession(dir)}
-      {/if}
-    {/if}
-
-    {#each projects as project (project.path)}
-      {@const own = ownFor(project.path)}
-      <div
-        class="project"
-        class:on={workspace.active === project.path}
-        class:cursor={current === `project:${project.path}`}
-        data-row="project:{project.path}"
-      >
-        <button class="row project-row" tabindex="-1" onclick={() => activate(project.path)} title={project.path}>
-          <span class="name">{projectLabel(project.path)}</span>
-          {#if accountOf(project.path) !== null}<span class="tag account" data-testid="project-account">{accountOf(project.path)}</span>{/if}
-          {#if hostOf(project.path) !== null}<span class="host" data-testid="project-host">{hostOf(project.path)}</span>{/if}
-          {#if !project.isGit}<span class="flag" title="Not a git repository">no git</span>{/if}
-        </button>
-        <button
-          class="icon"
-          tabindex="-1"
-          onclick={() => closeProject(project.path)}
-          aria-label="Close {projectLabel(project.path)}"
-          data-testid="close-project">×</button
-        >
-      </div>
-
-      {#each own as session (session.key)}
-        <div class="row-slot" animate:flip={rowMove()} in:rowFade|local out:rowFade|local>
-          {@render sessionRow(session)}
-        </div>
       {/each}
 
-      <!-- What an orchestrator started here stays in the project it runs in
-           and keeps out of the way: one line for each orchestrator, and the
-           sessions themselves behind it. -->
-      {#each groupsFor(project.path) as group (group.id)}
-        {@const id = foldId(project.path, group)}
-        <div class="fold-row">
-          <button
-            class="fold"
-            class:cursor={current === id}
-            tabindex="-1"
-            onclick={() => toggle(id)}
-            data-row={id}
-            data-testid="started-fold"
-          >
-            <span class="chevron" class:open={opened[id]}>▸</span>
-            <span class="fold-text">{foldLabel(group)}</span>
-            {#if group.asking > 0}
-              <span class="asking"><span class="ring"></span>{group.asking} asking</span>
-            {/if}
-          </button>
-          <!-- Over the row's end, as a session's own × is. -->
-          <span class="actions">
-            <button
-              class="icon"
-              tabindex="-1"
-              onclick={() => stopGroup(group)}
-              aria-label="Stop the sessions {group.label} started"
-              title="Stop these"
-              data-testid="stop-started">×</button
-            >
-          </span>
-        </div>
-        {#if opened[id]}
-          {#each group.sessions as session (session.key)}
-            <div
-              class="session started"
-              class:on={sessions.active === session.key}
-              class:cursor={current === `session:${session.key}`}
-              data-row="session:{session.key}"
-              animate:flip={rowMove()}
-              in:rowFade|local
-              out:rowFade|local
-            >
-              <button
-                class="row"
-                tabindex="-1"
-                onclick={() => choose(session.key)}
-                data-testid="started-session"
-              >
-                <span
-                  class="dot"
-                  class:live={isLive(session)}
-                  class:working={session.working}
-                  class:unread={session.unread}
-                  class:permission={session.needs === "permission"}
-                  title={statusLabel(session)}
-                ></span>
-                <span class="label" class:unread={session.unread}>{label(session)}</span>
-                <span class="state told">{statusLabel(session)}</span>
-              </button>
-              <span class="actions">
-                <button
-                  class="icon"
-                  tabindex="-1"
-                  onclick={() => closeSession(session.key)}
-                  aria-label="Close {label(session)}"
-                  title="Stop"
-                  data-testid="close-session">×</button
-                >
-              </span>
-            </div>
-          {/each}
+      <!-- What is a project's rather than a session's: the projects
+           themselves, and under the one you are looking at what the tree
+           shows for it. -->
+      <div class="group ruled" data-testid="projects-group">
+        <span class="group-title">Projects</span>
+        <span class="count">{projects.length + (pinned === null ? 0 : 1)}</span>
+      </div>
+      {#if pinned !== null}
+        {@render pinnedRow(pinned)}
+        {#if workspace.active === pinned}
+          {@render projectRest(pinned)}
+        {/if}
+      {/if}
+      {#each projects as project (project.path)}
+        {@render projectRow(project)}
+        {#if workspace.active === project.path}
+          {@render projectRest(project.path)}
         {/if}
       {/each}
+    {:else}
+      <!-- The orchestrator's own project, above the ones you opened: a session
+           that directs others runs here, and starts here like any other. -->
+      {#if pinned !== null}
+        {@const dir = pinned}
+        {@render pinnedRow(dir)}
 
-      {#if workspace.active === project.path}
-        {#each historyFor(project.path) as transcript (transcript.id)}
+        <!-- Each row is drawn in a slot of its own, which is what fades and
+             what moves: a row that goes leaves the ones below it to close the
+             gap rather than jump into it. -->
+        {#each conductors() as session (session.key)}
           <div class="row-slot" animate:flip={rowMove()} in:rowFade|local out:rowFade|local>
-            {@render pastRow(project.path, transcript)}
+            {@render sessionRow(session)}
           </div>
         {/each}
 
-        {@render newSession(project.path)}
+        {#if workspace.active === dir}
+          {@render projectRest(dir)}
+        {/if}
+      {/if}
 
-        <!-- An agent run in a plain terminal here leaves its sessions in the
-             same place. They are resumable, so they are here, one row per
-             agent that opens the list, rather than mixed in with what this
-             window started. -->
-        {#each AGENTS as agent (agent)}
-          {@const outside = outsideFor(project.path, agent)}
-          {@const fold = `${project.path}:${agent}`}
-          {#if outside.length > 0}
+      {#each projects as project (project.path)}
+        {@const own = ownFor(project.path)}
+        {@render projectRow(project)}
+
+        {#each own as session (session.key)}
+          <div class="row-slot" animate:flip={rowMove()} in:rowFade|local out:rowFade|local>
+            {@render sessionRow(session)}
+          </div>
+        {/each}
+
+        <!-- What an orchestrator started here stays in the project it runs in
+             and keeps out of the way: one line for each orchestrator, and the
+             sessions themselves behind it. -->
+        {#each groupsFor(project.path) as group (group.id)}
+          {@const id = foldId(project.path, group)}
+          <div class="fold-row">
             <button
               class="fold"
-              class:cursor={current === `fold:${fold}`}
+              class:cursor={current === id}
               tabindex="-1"
-              onclick={() => openResume(project.path, agent)}
-              data-row="fold:{fold}"
-              data-agent={agent}
-              data-testid="outside-fold"
+              onclick={() => toggle(id)}
+              data-row={id}
+              data-testid="started-fold"
             >
-              <span class="chevron">▸</span>
-              <span class="fold-text"
-                >{`${outside.length} ${agentTag(agent)} ${outside.length === 1 ? "session" : "sessions"} to resume`}</span
-              >
+              <span class="chevron" class:open={opened[id]}>▸</span>
+              <span class="fold-text">{foldLabel(group)}</span>
+              {#if group.asking > 0}
+                <span class="asking"><span class="ring"></span>{group.asking} asking</span>
+              {/if}
             </button>
+            <!-- Over the row's end, as a session's own × is. -->
+            <span class="actions">
+              <button
+                class="icon"
+                tabindex="-1"
+                onclick={() => stopGroup(group)}
+                aria-label="Stop the sessions {group.label} started"
+                title="Stop these"
+                data-testid="stop-started">×</button
+              >
+            </span>
+          </div>
+          {#if opened[id]}
+            {#each group.sessions as session (session.key)}
+              <div
+                class="session started"
+                class:on={sessions.active === session.key}
+                class:cursor={current === `session:${session.key}`}
+                data-row="session:{session.key}"
+                animate:flip={rowMove()}
+                in:rowFade|local
+                out:rowFade|local
+              >
+                <button
+                  class="row"
+                  tabindex="-1"
+                  onclick={() => choose(session.key)}
+                  data-testid="started-session"
+                >
+                  <span
+                    class="dot"
+                    class:live={isLive(session)}
+                    class:working={session.working}
+                    class:unread={session.unread}
+                    class:permission={session.needs === "permission"}
+                    title={statusLabel(session)}
+                  ></span>
+                  <span class="label" class:unread={session.unread}>{label(session)}</span>
+                  <span class="state told">{statusLabel(session)}</span>
+                </button>
+                <span class="actions">
+                  <button
+                    class="icon"
+                    tabindex="-1"
+                    onclick={() => closeSession(session.key)}
+                    aria-label="Close {label(session)}"
+                    title="Stop"
+                    data-testid="close-session">×</button
+                  >
+                </span>
+              </div>
+            {/each}
           {/if}
         {/each}
-      {/if}
-    {/each}
+
+        {#if workspace.active === project.path}
+          {@render projectRest(project.path)}
+        {/if}
+      {/each}
+    {/if}
   </div>
   </div>
 </Pane>
@@ -938,6 +1112,8 @@
   .nav.folded .flag,
   .nav.folded .new,
   .nav.folded .fold,
+  .nav.folded .views,
+  .nav.folded .count,
   .nav.folded .choice,
   .nav.folded .cursor::before,
   .error-row.folded,
@@ -975,13 +1151,109 @@
   }
 
   .head > button.cursor,
-  .tool.cursor {
+  .tool.cursor,
+  .views.cursor {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
 
-  .nav:focus-within .head .cursor::before {
+  .nav:focus-within .head .cursor::before,
+  .nav:focus-within .views.cursor::before {
     content: none;
+  }
+
+  /* Which way the sessions are listed: one segment each, sharing the
+     width, in the shape the account choice has. */
+  .views {
+    flex: none;
+    display: flex;
+    margin: 8px var(--pane-pad) 2px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-tag);
+    overflow: hidden;
+  }
+
+  .views button {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 6px;
+    border: 0;
+    border-right: 1px solid var(--rule);
+    background: none;
+    font-family: var(--chrome);
+    font-size: 10.5px;
+    letter-spacing: var(--label-track-fine);
+    text-transform: var(--label-case);
+    color: var(--ink-3);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .views button:hover {
+    color: var(--ink-2);
+  }
+
+  .views button:last-child {
+    border-right: 0;
+  }
+
+  .views button.on {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* A group's heading in the status view: what the sessions under it are
+     doing, and how many. The one that needs you wears the accent. */
+  .group {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 8px var(--pane-pad) 2px;
+    font-family: var(--chrome);
+    font-size: var(--heading-size);
+    font-weight: var(--heading-weight);
+    letter-spacing: var(--label-track);
+    text-transform: var(--label-case);
+    color: var(--ink-3);
+  }
+
+  .group.hot {
+    color: var(--accent);
+  }
+
+  .count {
+    font-weight: normal;
+  }
+
+  /* The projects sit under the groups, behind a rule. */
+  .group.ruled {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--rule);
+  }
+
+  /* A status row stands under no project, so it keeps the pane's edge. */
+  .row.flush {
+    padding-left: var(--row-pad-x);
+  }
+
+  /* Where a session belongs, under its name: the project in the hand the
+     tree names it in, and the rest quieter after a dot. */
+  .crumb {
+    font-size: 10.5px;
+    line-height: 1.35;
+    color: var(--ink-3);
+  }
+
+  .crumb .where {
+    color: var(--ink-2);
+  }
+
+  .crumb .sep {
+    margin: 0 4px;
+    opacity: 0.6;
   }
 
   /* The way in is the accent; everything else the head offers is behind the
@@ -1236,7 +1508,8 @@
   }
 
   .label,
-  .note {
+  .note,
+  .crumb {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
