@@ -766,9 +766,12 @@ export interface Core {
   /** Opens a tab: a url, or none for a new tab the frontend draws its own
       page for. `session` names the agent that asked, for a tab an agent
       opens. */
+  /** Opens a tab, active, or `behind` the active one, which then stays
+      active and on screen while the new one waits out of sight. */
   browserOpen(
     url: string | null,
     session: string | null,
+    behind?: boolean,
   ): Promise<BrowserSnapshot>;
   browserClose(id: number): Promise<BrowserSnapshot>;
   browserActivate(id: number): Promise<BrowserSnapshot>;
@@ -1101,8 +1104,8 @@ const tauriCore: Core = {
     return listen("open_requested", () => handler());
   },
 
-  browserOpen: (url, session) =>
-    invoke<BrowserSnapshot>("browser_open", { url, session }),
+  browserOpen: (url, session, behind = false) =>
+    invoke<BrowserSnapshot>("browser_open", { url, session, behind }),
   browserClose: (id) => invoke<BrowserSnapshot>("browser_close", { id }),
   browserActivate: (id) => invoke<BrowserSnapshot>("browser_activate", { id }),
   browserNavigate: (id, address) =>

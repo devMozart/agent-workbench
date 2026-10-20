@@ -78,6 +78,57 @@ test.describe("the browser's tools", () => {
     expect(answer.content).toContain("example.com");
   });
 
+  test("browser_open from a session the user is not looking at opens behind, and comes forward on switching", async ({
+    page,
+  }) => {
+    await page.getByTestId("new-session").click();
+    await page.getByTestId("new-session").click();
+    await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
+    await expect(page.locator(".session.on")).toContainText("session 2");
+    // The user is looking at a page of their own beside session 2.
+    await push(page, {
+      id: "b-h0",
+      tool: "browser_open",
+      arguments: { url: "http://localhost:4000" },
+      session: "session-2",
+    });
+    await expect.poll(() => answerTo(page, "b-h0")).not.toBeNull();
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "1");
+
+    await push(page, {
+      id: "b-h1",
+      tool: "browser_open",
+      arguments: { url: "http://localhost:3000" },
+      session: "session-1",
+    });
+    await expect.poll(() => answerTo(page, "b-h1")).not.toBeNull();
+    expect((await answerTo(page, "b-h1"))!.content).toContain("Opened tab 2");
+    // Open, but behind: the user's own tab stays in front.
+    await expect(page.getByTestId("browser-tab")).toHaveCount(2);
+    await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "1");
+    // A tab-less call from session 1 reads its own tab, not the user's.
+    await push(page, { id: "b-h2", tool: "browser_snapshot", session: "session-1" });
+    await expect.poll(() => answerTo(page, "b-h2")).not.toBeNull();
+    expect((await answerTo(page, "b-h2"))!.content).toContain("page http://localhost:3000/");
+    // And a screenshot from it is refused rather than shown over the user's tab.
+    await push(page, { id: "b-h3", tool: "browser_screenshot", session: "session-1" });
+    await expect.poll(() => answerTo(page, "b-h3")).not.toBeNull();
+    expect((await answerTo(page, "b-h3"))!.error).toContain("not on screen");
+    await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "1");
+
+    // The sessions pane is folded while reviewing: stepped to by chord.
+    await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
+    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "2");
+
+    // Back to session 2: its own tab is in front again.
+    await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
+    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "1");
+  });
+
   test("browser_open with no url is refused", async ({ page }) => {
     await push(page, { id: "b-2", tool: "browser_open", arguments: {} });
     await expect.poll(() => answerTo(page, "b-2")).not.toBeNull();

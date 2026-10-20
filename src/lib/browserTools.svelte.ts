@@ -11,7 +11,7 @@
 import { core, type BrowserRequest, type BrowserTab } from "$lib/core";
 import { activate as activateTab, activeTab, browser } from "$lib/browser.svelte";
 import { showBrowser } from "$lib/files.svelte";
-import { held, projectOf } from "$lib/show.svelte";
+import { elsewhere, held, projectOf } from "$lib/show.svelte";
 
 /** The ids of the calls handled lately, so a call delivered twice is
     handled once. */
@@ -83,23 +83,34 @@ function run(request: BrowserRequest): Answered | Promise<Answered> {
 async function openBrowserTool(request: BrowserRequest): Promise<Answered> {
   const url = text(request, "url");
   if (url === null) return refused("Opening a tab needs a url.");
+  // The tab opens and loads either way. From the session on screen it
+  // comes to the front and the viewer shows the browser now; from another
+  // it opens behind whatever the user has in front, and comes to the front
+  // when they switch to the session, as the show tool's place does.
+  const project = projectOf(request.cwd);
+  const behind = project !== null && offScreen(request);
   // Goes through the core directly, not through browser.svelte's own open():
   // that keeps its rejection on a store field meant for the address bar's
   // one attempt at a time, which two calls landing together would race on.
   let snapshot;
   try {
-    snapshot = await core().browserOpen(url, request.session);
+    snapshot = await core().browserOpen(url, request.session, behind);
   } catch (error) {
     return refused(String(error));
   }
   browser.tabs = snapshot.tabs;
   browser.active = snapshot.active;
-  // The tab is open and loading either way; the viewer shows the browser
-  // now for the session on screen, and on switching for another.
-  const project = projectOf(request.cwd);
-  if (project === null || !held(request, project, showBrowser)) showBrowser();
-  const tab = activeTab();
+  // Tabs come in opening order: the new one is last.
+  const tab = snapshot.tabs[snapshot.tabs.length - 1] ?? null;
   if (tab === null) return refused("The tab could not be opened.");
+  const reveal = async () => {
+    if (!browser.tabs.some((candidate) => candidate.id === tab.id)) return;
+    if (browser.active !== tab.id) await activateTab(tab.id);
+    showBrowser();
+  };
+  // Held only once the tab is open: a failed open displaces nothing the
+  // session's agent asked to show before it.
+  if (project === null || !held(request, project, reveal)) await reveal();
   return arrived("Opened", await settled(tab.id), tab.id);
 }
 
@@ -118,12 +129,29 @@ function tabLines(): string {
     .join("\n");
 }
 
-/** The tab a call names, or the active one when it names none. Null when
+/** Whether the call is from a session the window knows while the user is
+    looking at another: the browser on screen is then not the agent's to
+    take over. */
+function offScreen(request: BrowserRequest): boolean {
+  const project = projectOf(request.cwd);
+  return project !== null && elsewhere(request, project) !== null;
+}
+
+/** The tab a call names, or, when it names none, the active one: what the
+    user and the agent are both looking at. While the user is looking at
+    another session the active tab is theirs, in whatever project, so the
+    call falls to the last tab the agent's session opened instead. Null when
     there is no such tab to act on. */
 function resolveTab(request: BrowserRequest): BrowserTab | null {
   const id = numberArg(request, "tab");
-  if (id === null) return activeTab();
-  return browser.tabs.find((tab) => tab.id === id) ?? null;
+  if (id !== null) return browser.tabs.find((tab) => tab.id === id) ?? null;
+  if (request.session !== null && offScreen(request)) {
+    const own = browser.tabs.filter(
+      (tab) => tab.opener.kind === "agent" && tab.opener.session === request.session,
+    );
+    if (own.length > 0) return own[own.length - 1];
+  }
+  return activeTab();
 }
 
 /** Why `resolveTab` found nothing: a named tab that is not open, or, with
@@ -249,6 +277,12 @@ function arrived(verb: string, tab: BrowserTab | null, id: number): Answered {
 async function screenshotTool(request: BrowserRequest): Promise<Answered> {
   const tab = resolveTab(request);
   if (tab === null) return refused(noTabMessage(request));
+  // A hidden view cannot be captured, and bringing the tab to the front
+  // over what the user is reading in another session is not on.
+  if (offScreen(request))
+    return refused(
+      `Tab ${tab.id} is not on screen: the user is looking at another session, and a hidden tab cannot be captured. Read it with browser_snapshot, or ask the user to switch to this session.`,
+    );
   showBrowser();
   if (tab.id !== browser.active) await activateTab(tab.id);
   // The view is placed as soon as the viewer shows the tab; a moment is

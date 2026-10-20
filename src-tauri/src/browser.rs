@@ -170,6 +170,7 @@ fn tab_webview(id: TabId, start: &Url, app: &AppHandle) -> WebviewBuilder<Wry> {
                     browser,
                     Some(url.to_string()),
                     Opener::User,
+                    false,
                 )
                 .await;
             });
@@ -355,14 +356,18 @@ where
 }
 
 /// Opens a tab on `window`, builds its webview at the browser's last
-/// placement if it is showing, and hides the tab that was active. Shared by
-/// the `browser_open` command and by a tab's own `window.open`.
+/// placement if it is showing, and hides the tab that was active. Opened
+/// `behind`, the tab that was active stays active and on screen instead,
+/// and the new one waits out of sight until it is activated: for a tab an
+/// agent opens while the user is looking at another session. Shared by the
+/// `browser_open` command and by a tab's own `window.open`.
 async fn open_tab(
     window: Window,
     app: AppHandle,
     browser: Arc<Browser>,
     url: Option<String>,
     opener: Opener,
+    behind: bool,
 ) -> Result<Snapshot, String> {
     let start = match url {
         Some(raw) => Some(normalize_url(&raw)?),
@@ -375,9 +380,16 @@ async fn open_tab(
     let (previous, id) = {
         let mut tabs = browser.tabs.lock().unwrap();
         let previous = tabs.active();
-        let id = tabs.open(start.clone(), opener);
+        let id = if behind {
+            tabs.open_behind(start.clone(), opener)
+        } else {
+            tabs.open(start.clone(), opener)
+        };
         (previous, id)
     };
+    // Behind an active tab, the new one is not the active one and stays
+    // hidden; with no tab open yet it is active, behind or not.
+    let in_front = browser.tabs.lock().unwrap().active() == Some(id);
 
     let (rect, showing) = {
         let place = browser.place.lock().unwrap();
@@ -390,7 +402,7 @@ async fn open_tab(
 
     // A tab opened empty is a new tab, which the window's page draws
     // itself: its blank webview stays out of sight until it has an address.
-    let (bounds, visible) = match (showing && page != "about:blank", rect) {
+    let (bounds, visible) = match (in_front && showing && page != "about:blank", rect) {
         (true, Some(rect)) => (rect, true),
         _ => ((0.0, 0.0, 1.0, 1.0), false),
     };
@@ -417,9 +429,11 @@ async fn open_tab(
     #[cfg(target_os = "linux")]
     layer::adopt(&webview, bounds)?;
 
-    if let Some(previous) = previous {
-        if let Some(previous_webview) = window.get_webview(&previous.label()) {
-            previous_webview.hide().map_err(|e| e.to_string())?;
+    if in_front {
+        if let Some(previous) = previous {
+            if let Some(previous_webview) = window.get_webview(&previous.label()) {
+                previous_webview.hide().map_err(|e| e.to_string())?;
+            }
         }
     }
 
@@ -471,13 +485,14 @@ pub async fn browser_open(
     browser: State<'_, Arc<Browser>>,
     url: Option<String>,
     session: Option<String>,
+    behind: Option<bool>,
 ) -> Result<Snapshot, String> {
     let browser = Arc::clone(&browser);
     let opener = match session {
         Some(session) => Opener::Agent { session },
         None => Opener::User,
     };
-    open_tab(window, app, browser, url, opener).await
+    open_tab(window, app, browser, url, opener, behind.unwrap_or(false)).await
 }
 
 #[tauri::command]

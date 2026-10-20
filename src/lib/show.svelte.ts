@@ -160,6 +160,18 @@ export function sessionFor(
     another session, by session key: the latest call, to open on switching. */
 const heldOpens = new Map<string, () => void | Promise<void>>();
 
+/** The request's session when it is one the window knows and the user is
+    looking at another: what it asks to open waits. Null when the request is
+    from the session on screen, or from no session the window knows. */
+export function elsewhere(
+  request: { cwd: string; session: string | null },
+  project: string,
+) {
+  const session = sessionFor(request, project);
+  if (session === null || session.key === sessions.active) return null;
+  return session;
+}
+
 /** Holds `open` on the request's session when that session is not the one
     on screen, to run when the user switches to it, and says so. False when
     the request is from the session on screen, or from no session the window
@@ -169,8 +181,8 @@ export function held(
   project: string,
   open: () => void | Promise<void>,
 ): boolean {
-  const session = sessionFor(request, project);
-  if (session === null || session.key === sessions.active) return false;
+  const session = elsewhere(request, project);
+  if (session === null) return false;
   heldOpens.set(session.key, open);
   return true;
 }

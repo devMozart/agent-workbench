@@ -10,7 +10,7 @@
 
 import { tick } from "svelte";
 import type { MediaItem } from "$lib/media.svelte";
-import { browser } from "$lib/browser.svelte";
+import { activate as activateTab, browser } from "$lib/browser.svelte";
 import {
   closeViewer,
   files,
@@ -41,7 +41,7 @@ export type Viewed =
       project: string;
       page: NonNullable<typeof files.pluginView>;
     }
-  | { kind: "browser"; project: string }
+  | { kind: "browser"; project: string; tab: number | null }
   | null;
 
 const viewed = new Map<string, Viewed>();
@@ -64,7 +64,7 @@ export function snapshot(project = workspace.active): Viewed {
   if (files.media !== null) return { kind: "media", project, item: files.media };
   if (files.pluginView !== null)
     return { kind: "plugin", project, page: files.pluginView };
-  if (browser.showing) return { kind: "browser", project };
+  if (browser.showing) return { kind: "browser", project, tab: browser.active };
   if (files.selected === null) return null;
   return {
     kind: "file",
@@ -97,6 +97,15 @@ async function restore(what: Viewed) {
   } else if (what.kind === "plugin") {
     showPluginView(what.page);
   } else if (what.kind === "browser") {
+    // On the tab it was left on, if that is still open: another session's
+    // agent may have brought its own to the front in between.
+    if (
+      what.tab !== null &&
+      what.tab !== browser.active &&
+      browser.tabs.some((tab) => tab.id === what.tab)
+    ) {
+      await activateTab(what.tab);
+    }
     showBrowser();
   } else {
     if (

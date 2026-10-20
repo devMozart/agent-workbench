@@ -47,8 +47,15 @@ vi.mock("$lib/core", () => ({
     async watchShown() {},
     async browserPlace() {},
     async browserHide() {},
+    async browserActivate(id: number) {
+      activated.push(id);
+      return { tabs: browser.tabs, active: id };
+    },
   }),
 }));
+
+/** The tabs the fake core was asked to bring to the front. */
+const activated: number[] = [];
 
 const repo = (path: string) => ({
   path,
@@ -183,6 +190,44 @@ describe("switching sessions", () => {
     expect(files.pluginView).toBeNull();
     expect(browser.showing).toBe(true);
     expect(layout.mode).toBe("reviewing");
+  });
+
+  it("puts the browser back on the tab it was left on", async () => {
+    const tab = (id: number) => ({
+      id,
+      url: `http://localhost:${id}/`,
+      title: "",
+      home: `http://localhost:${id}/`,
+      opener: { kind: "user" as const },
+      loading: false,
+      canGoBack: false,
+      canGoForward: false,
+      error: null,
+    });
+    browser.tabs = [tab(1), tab(2)];
+    browser.active = 1;
+    await sessionShown("a");
+    showBrowser();
+    expect(snapshot()).toEqual({ kind: "browser", project: "/one", tab: 1 });
+
+    await sessionShown("b");
+    // Another session's agent brought its own tab to the front meanwhile.
+    browser.active = 2;
+    showBrowser();
+
+    await sessionShown("a");
+    expect(activated).toEqual([1]);
+    expect(browser.active).toBe(1);
+    expect(browser.showing).toBe(true);
+
+    // Its tab closed in between: the browser comes back on whatever is active.
+    await sessionShown("b");
+    browser.tabs = [tab(2)];
+    browser.active = 2;
+    activated.length = 0;
+    await sessionShown("a");
+    expect(activated).toEqual([]);
+    expect(browser.showing).toBe(true);
   });
 
   it("opens the viewer again for a session that had one, after it was closed elsewhere", async () => {

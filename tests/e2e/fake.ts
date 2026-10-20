@@ -796,7 +796,11 @@ export async function installFakeCore(
 
         // The embedded browser: tabs kept in memory, with the address rules
         // and the history stack a real tab would have.
-        browserOpen: async (url: string | null, session: string | null) => {
+        browserOpen: async (
+          url: string | null,
+          session: string | null,
+          behind = false,
+        ) => {
           const home = url === null ? null : normalizeBrowserAddress(url);
           const id = browserState.nextId++;
           const tab: FakeBrowserTab = {
@@ -814,7 +818,7 @@ export async function installFakeCore(
           browserState.tabs.push(tab);
           browserState.histories.set(id, { stack: [], index: -1 });
           if (home !== null) browserNavigated(tab, home);
-          browserState.active = id;
+          if (!behind || browserState.active === null) browserState.active = id;
           emitBrowserTabs();
           return browserSnapshot();
         },

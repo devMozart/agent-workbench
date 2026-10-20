@@ -7,7 +7,7 @@ const answers: {
   content: string | null;
   error: string | null;
 }[] = [];
-const opened: { url: string | null; session: string | null }[] = [];
+const opened: { url: string | null; session: string | null; behind: boolean }[] = [];
 const activated: number[] = [];
 const closed: number[] = [];
 const navigated: { id: number; address: string }[] = [];
@@ -29,8 +29,12 @@ let evalResult = "null";
 
 vi.mock("$lib/core", () => ({
   core: () => ({
-    browserOpen: async (url: string | null, session: string | null) => {
-      opened.push({ url, session });
+    browserOpen: async (
+      url: string | null,
+      session: string | null,
+      behind = false,
+    ) => {
+      opened.push({ url, session, behind });
       if (openError !== null) throw new Error(openError);
       return openResult;
     },
@@ -161,35 +165,85 @@ beforeEach(() => {
   evalResult = "null";
 });
 
+/** Two sessions in the demo project, the user looking at the second: a
+    call from the first is from a session not on screen. */
+function twoSessions() {
+  workspace.open.push({
+    path: "/home/ada/dev/demo",
+    name: "demo",
+    repository: "/home/ada/dev/demo",
+    isGit: true,
+  });
+  workspace.active = "/home/ada/dev/demo";
+  const a = create("/home/ada/dev/demo");
+  started(a.key, "pty-1", "s1");
+  const b = create("/home/ada/dev/demo");
+  started(b.key, "pty-2", "s2");
+  return { a, b };
+}
+
 describe("browser_open", () => {
   it("opens the url, shows the browser, and answers with the tab", async () => {
     openResult = { tabs: [tab(1, "https://example.com/", { title: "Example" })], active: 1 };
     await handle(call("browser_open", { url: "https://example.com" }));
-    expect(opened).toEqual([{ url: "https://example.com", session: null }]);
+    expect(opened).toEqual([{ url: "https://example.com", session: null, behind: false }]);
     expect(last().error).toBeNull();
     expect(last().content).toBe("Opened tab 1: https://example.com/, Example");
   });
 
   it("opens the tab at once but shows the browser only when the user switches to the session", async () => {
-    workspace.open.push({
-      path: "/home/ada/dev/demo",
-      name: "demo",
-      repository: "/home/ada/dev/demo",
-      isGit: true,
-    });
-    workspace.active = "/home/ada/dev/demo";
-    const a = create("/home/ada/dev/demo");
-    started(a.key, "pty-1", "s1");
-    const b = create("/home/ada/dev/demo");
-    started(b.key, "pty-2", "s2");
+    const { a } = twoSessions();
     openResult = { tabs: [tab(1, "https://example.com/")], active: 1 };
     await handle(call("browser_open", { url: "https://example.com" }, { session: "s1" }));
-    expect(opened).toEqual([{ url: "https://example.com", session: "s1" }]);
+    expect(opened).toEqual([{ url: "https://example.com", session: "s1", behind: true }]);
     expect(last().content).toContain("Opened tab 1");
     expect(browser.showing).toBe(false);
     select(a.key);
     switched(a.key);
+    await Promise.resolve();
     expect(browser.showing).toBe(true);
+  });
+
+  it("opens behind the tab the user is on in another session, and brings it to the front on switching", async () => {
+    const { a } = twoSessions();
+    const theirs = tab(1, "http://localhost:4000/", { opener: { kind: "user" } });
+    browser.tabs = [theirs];
+    browser.active = 1;
+    browser.showing = true;
+    const mine = tab(2, "http://localhost:3000/", {
+      opener: { kind: "agent", session: "s1" },
+    });
+    openResult = { tabs: [theirs, mine], active: 1 };
+    await handle(call("browser_open", { url: "http://localhost:3000" }, { session: "s1" }));
+    expect(opened).toEqual([{ url: "http://localhost:3000", session: "s1", behind: true }]);
+    expect(last().content).toContain("Opened tab 2");
+    expect(browser.active).toBe(1);
+    expect(activated).toEqual([]);
+
+    nextSnapshot = { tabs: [theirs, mine], active: 2 };
+    select(a.key);
+    switched(a.key);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(activated).toEqual([2]);
+    expect(browser.active).toBe(2);
+    expect(browser.showing).toBe(true);
+  });
+
+  it("does nothing on switching when the tab it opened behind has since been closed", async () => {
+    const { a } = twoSessions();
+    browser.showing = false;
+    const mine = tab(2, "http://localhost:3000/", {
+      opener: { kind: "agent", session: "s1" },
+    });
+    openResult = { tabs: [tab(1, "http://localhost:4000/"), mine], active: 1 };
+    await handle(call("browser_open", { url: "http://localhost:3000" }, { session: "s1" }));
+    browser.tabs = [tab(1, "http://localhost:4000/")];
+    select(a.key);
+    switched(a.key);
+    await Promise.resolve();
+    expect(activated).toEqual([]);
+    expect(browser.showing).toBe(false);
   });
 
   it("refuses without a url", async () => {
@@ -367,6 +421,57 @@ describe("browser_screenshot", () => {
     await handle(call("browser_screenshot", { tab: 2 }));
     expect(activated).toEqual([2]);
     expect(last().content).toBe("/tmp/workbench-browser/2-fake.png");
+  });
+
+  it("refuses from a session the user is not looking at, leaving the viewer alone", async () => {
+    twoSessions();
+    browser.tabs = [
+      tab(1, "http://localhost:4000/"),
+      tab(2, "http://localhost:3000/", { opener: { kind: "agent", session: "s1" } }),
+    ];
+    browser.active = 1;
+    await handle(call("browser_screenshot", { tab: 2 }, { session: "s1" }));
+    expect(activated).toEqual([]);
+    expect(browser.showing).toBe(false);
+    expect(browser.active).toBe(1);
+    expect(last().error).toContain("Tab 2 is not on screen");
+    expect(last().error).toContain("browser_snapshot");
+  });
+});
+
+describe("a call from a session the user is not looking at", () => {
+  it("falls to the last tab that session opened rather than the user's", async () => {
+    twoSessions();
+    browser.tabs = [
+      tab(2, "http://localhost:3000/", { opener: { kind: "agent", session: "s1" } }),
+      tab(3, "http://localhost:3000/b", { opener: { kind: "agent", session: "s1" } }),
+      tab(1, "http://localhost:4000/"),
+    ];
+    browser.active = 1;
+    await handle(call("browser_click", { ref: "e1" }, { session: "s1" }));
+    expect(clicked).toEqual([{ id: 3, ref: "e1" }]);
+    await handle(call("browser_snapshot", {}, { session: "s1" }));
+    expect(last().content).toBe("page text [ref=e1]");
+  });
+
+  it("acts on the active tab when it opened none of its own", async () => {
+    twoSessions();
+    browser.tabs = [tab(1, "http://localhost:4000/")];
+    browser.active = 1;
+    await handle(call("browser_click", { ref: "e1" }, { session: "s1" }));
+    expect(clicked).toEqual([{ id: 1, ref: "e1" }]);
+  });
+
+  it("acts on the active tab from the session on screen whichever tabs it opened", async () => {
+    const { a } = twoSessions();
+    select(a.key);
+    browser.tabs = [
+      tab(2, "http://localhost:3000/", { opener: { kind: "agent", session: "s1" } }),
+      tab(1, "http://localhost:4000/"),
+    ];
+    browser.active = 1;
+    await handle(call("browser_click", { ref: "e1" }, { session: "s1" }));
+    expect(clicked).toEqual([{ id: 1, ref: "e1" }]);
   });
 });
 

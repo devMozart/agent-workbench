@@ -24,7 +24,9 @@ the column with the others.
 The viewer shows the browser the way it shows a file: opening it puts away
 whatever file, presented media or plugin page the viewer held, and opening
 one of those, or closing the viewer, puts the browser away in turn, leaving
-its tabs exactly as they were. The pane's "⋯" menu opens the browser on
+its tabs exactly as they were. Switching sessions keeps the browser, and
+the tab it was on, with the session it was open beside, the way a file is
+kept, so coming back to a session puts its tab in front again. The pane's "⋯" menu opens the browser on
 whatever tab is active, opening one first if none is.
 
 Above a tab sits a bar with back, forward, reload and home, each grey until
@@ -84,8 +86,10 @@ commands reachable from it.
 
 With the hooks on, ten more tools join the six every session already has:
 `browser_open` opens a tab at a `url` and shows the browser in the viewer,
-now for the session on screen and on switching to it for another, as the
-[show tool](hooks.md#the-agents-tools) does; `browser_close` closes one. `browser_tabs` answers with the open tabs and
+as the [show tool](hooks.md#the-agents-tools) does: now for the session on
+screen, and for another the tab opens behind whatever the user has in
+front, in whichever project, and comes to the front when they switch to
+the session; `browser_close` closes one. `browser_tabs` answers with the open tabs and
 which is active. `browser_navigate` sends a tab to a `url`, or steps it
 back, forward or reloads it. Opening and navigating answer once the page
 has stopped loading, with where the tab landed or why it did not load, so
@@ -98,7 +102,9 @@ its text, submitting it too when told to. `browser_console`
 answers with what the page has logged since it was last asked, failed
 resources, errors and unhandled rejections among them, and empties it as it
 reads. `browser_screenshot` answers with the path to a PNG of the tab,
-bringing it to the front first. `browser_eval` runs a script, a function
+bringing it to the front first; while the user is looking at another
+session it is refused instead, since a hidden tab cannot be captured and
+the user's own view is not the agent's to take over. `browser_eval` runs a script, a function
 body, in the tab's page, `return` and `await` both work, and answers with
 what it returned.
 
@@ -112,9 +118,12 @@ page can neither see nor reach, and nothing they leave behind survives to
 the next call, so a ref lives as an attribute on its element rather than in
 memory.
 
-The tools that act on a tab take its id, left out for whichever is active.
-A tab an agent opens carries the session that opened it, and the fold and
-the tab strip mark it. The browser is
+The tools that act on a tab take its id, left out for whichever is active,
+what the user and the agent are both looking at. While the user is looking
+at another session the active tab is theirs, so a call that names no tab
+falls to the last tab the agent's session opened instead. A tab an agent
+opens carries the session that opened it, and the fold and the tab strip
+mark it. The browser is
 always the one in the app on the user's own machine: a session running on a
 remote machine still opens its tabs there, in the window in front of the
 user, so `localhost` in an address then means that machine, not the remote

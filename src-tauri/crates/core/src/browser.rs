@@ -252,6 +252,14 @@ impl Tabs {
     /// Opens a new tab, which becomes active. Its url starts as `home`, or
     /// `about:blank` for a tab opened empty.
     pub fn open(&mut self, home: Option<String>, opener: Opener) -> TabId {
+        let id = self.open_behind(home, opener);
+        self.active = Some(id);
+        id
+    }
+
+    /// Opens a new tab behind the active one, which stays active: for a tab
+    /// an agent opens while the user is looking at another session.
+    pub fn open_behind(&mut self, home: Option<String>, opener: Opener) -> TabId {
         let id = TabId(self.next_id);
         self.next_id += 1;
         let url = home.clone().unwrap_or_else(|| "about:blank".to_string());
@@ -270,7 +278,9 @@ impl Tabs {
             can_go_forward: false,
             error: None,
         });
-        self.active = Some(id);
+        if self.active.is_none() {
+            self.active = Some(id);
+        }
         id
     }
 
@@ -599,6 +609,23 @@ mod tests {
         assert!(tabs.close(a));
         let c = tabs.open(None, Opener::User);
         assert_eq!(c.get(), 3, "closed ids are never handed out again");
+    }
+
+    #[test]
+    fn opening_behind_leaves_the_active_tab_active_unless_there_was_none() {
+        let mut tabs = Tabs::new();
+        let a = tabs.open_behind(Some("https://a.example/".to_string()), Opener::User);
+        assert_eq!(tabs.active(), Some(a), "the first tab is active either way");
+        let b = tabs.open_behind(
+            Some("https://b.example/".to_string()),
+            Opener::Agent {
+                session: "s-1".to_string(),
+            },
+        );
+        assert_eq!(tabs.active(), Some(a));
+        assert_eq!(tabs.get(b).unwrap().url, "https://b.example/");
+        assert!(tabs.activate(b));
+        assert_eq!(tabs.active(), Some(b));
     }
 
     #[test]
