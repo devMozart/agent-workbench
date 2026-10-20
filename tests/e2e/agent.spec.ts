@@ -936,6 +936,39 @@ test.describe("working, and waiting for you", () => {
     await expect(rows(page).first()).toContainText("running");
   });
 
+  // The agent ends its turn to wait on subagents it runs in the background,
+  // and says so with its stop: the row works on through the still screen,
+  // with the agent's parting line under the name.
+  test("stays working while the agent waits on its subagents", async ({
+    page,
+  }) => {
+    const event = (kind: string, note?: string) =>
+      page.evaluate(
+        ({ kind, note }) =>
+          window.__fake.sessionEvent?.({ sessionId: "session-1", kind, note }),
+        { kind, note },
+      );
+
+    await event("prompt");
+    await page.evaluate(() => window.__fake.emit("pty-1", "x".repeat(400)));
+    await event("delegated", "Reviewing in the background.");
+    await expect(rows(page).first()).toContainText("working");
+    await expect(page.getByTestId("session-note")).toHaveText(
+      "Reviewing in the background.",
+    );
+    // Longer than the still screen that would otherwise end the turn.
+    await page.waitForTimeout(5600);
+    await expect(rows(page).first()).toContainText("working");
+    await expect(rows(page).first().locator(".dot")).not.toHaveClass(/unread/);
+
+    // The report comes back as a prompt, and that turn ends for real.
+    await event("prompt");
+    await expect(page.getByTestId("session-note")).toHaveCount(0);
+    await event("stop", "Done.");
+    await expect(rows(page).first()).toContainText("waiting for you");
+    await expect(page.getByTestId("session-note")).toHaveText("Done.");
+  });
+
   // A row's × appears over its end on hover and stops the session; the
   // past row it leaves has the archive button, which files it with the
   // sessions to resume, behind the fold.

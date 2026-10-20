@@ -124,12 +124,19 @@ With the project's hooks on (Live updates, in the settings) the transitions
 are reported by the agent. Both agents' prompt, stop and permission hooks
 append to a log the core tails, and from the first line a session's row follows the
 hooks: working from the prompt, needs permission while the agent asks,
-with a hollow ring on the dot, waiting for you from the stop. The pty
+with a hollow ring on the dot, waiting for you from the stop. A stop that
+leaves the agent's own subagents running in the background is not one: the
+agent has ended its turn to wait for their report, which starts the next,
+and the row stays working through it, with the agent's parting line under
+the name. The pty
 heuristic stands down for that session, except for two things the hooks
 cannot say: output after a permission prompt means it was granted and the
 agent went on, and, for Claude Code, a screen that goes still, give or take a
 redraw, for five seconds while the hooks still say working means the turn ended
-without them, which is what an Escape at the keyboard does.
+without them, which is what an Escape at the keyboard does. A session
+waiting on its subagents is still by nature, and that silence is not read
+that way; an idle notice from the agent, which it sends only once nothing
+of its own is running, ends the working either way.
 
 ## Accounts
 

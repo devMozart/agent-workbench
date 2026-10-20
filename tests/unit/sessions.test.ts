@@ -1169,6 +1169,59 @@ describe("working, and waiting for you", () => {
     }
   });
 
+  // Claude Code runs subagents in the background by default: the agent ends
+  // its turn to wait for them, and their report is the next prompt. The
+  // stop hook says so, and the row keeps working through the wait, still
+  // screen and all.
+  it("keeps a session working while its subagents run in the background", () => {
+    vi.useFakeTimers();
+    try {
+      const session = live(A, "pty-1");
+      live(A, "pty-2");
+      exact("session-pty-1", "prompt");
+      output(session.key, WORK_BYTES);
+      exact("session-pty-1", "delegated", "Reviewing in the background.");
+      expect(session.working).toBe(true);
+      expect(session.unread).toBe(false);
+      expect(session.note).toBe("Reviewing in the background.");
+      expect(statusLabel(session)).toBe("working");
+      // The prompt sits idle on screen for as long as the agents take.
+      vi.advanceTimersByTime(QUIET_EXACT_MS * 3);
+      output(session.key, 12);
+      vi.advanceTimersByTime(QUIET_EXACT_MS * 3);
+      expect(session.working).toBe(true);
+      expect(session.unread).toBe(false);
+
+      // The report comes back as a prompt, and the turn ends for real.
+      exact("session-pty-1", "prompt");
+      expect(session.note).toBeNull();
+      output(session.key, WORK_BYTES);
+      exact("session-pty-1", "stop", "Done.");
+      expect(session.working).toBe(false);
+      expect(session.unread).toBe(true);
+      expect(session.note).toBe("Done.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The agent sends its idle notice only once nothing of its own is
+  // running: a wait that never ends, the subagents killed under it, ends
+  // there.
+  it("ends a delegated wait when the agent says it is idle", () => {
+    const session = live(A, "pty-1");
+    live(A, "pty-2");
+    exact("session-pty-1", "prompt");
+    exact("session-pty-1", "delegated");
+    expect(session.working).toBe(true);
+    exact("session-pty-1", "idle");
+    expect(session.working).toBe(false);
+    expect(session.unread).toBe(true);
+    // Escape during the next turn ends it the usual way again.
+    exact("session-pty-1", "prompt");
+    expect(session.delegated).toBe(false);
+  });
+
   it("reads a session the user prompted, and ignores an id it does not have", () => {
     const session = live(A, "pty-1");
     session.unread = true;

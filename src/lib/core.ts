@@ -76,7 +76,7 @@ export interface Spawned {
     is asking), `idle` (it has been waiting a while). */
 export interface SessionEvent {
   sessionId: string;
-  kind: "prompt" | "stop" | "permission" | "idle";
+  kind: "prompt" | "stop" | "delegated" | "permission" | "idle";
   /** With a stop, the first line of what the agent last said. */
   note?: string;
 }

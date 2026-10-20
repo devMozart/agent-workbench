@@ -94,6 +94,9 @@ export interface Session {
   exact: boolean;
   /** What the agent is blocked on, when its hooks say so. */
   needs: "permission" | null;
+  /** The agent ended its turn with subagents of its own still running,
+      whose report starts its next one: working, with a still screen. */
+  delegated: boolean;
   /** When the row last changed what it says: started working, went quiet,
       asked, was looked at, ended. The status view sorts by it. */
   changedAt: number;
@@ -682,6 +685,7 @@ function row(
     note: null,
     exact: false,
     needs: null,
+    delegated: false,
     changedAt: Date.now(),
     exitCode: null,
     error: null,
@@ -984,13 +988,20 @@ export function output(key: string, bytes: number, now = Date.now()) {
     // The hooks say when it starts and stops. Output still says two things
     // they do not: a permission was granted and the agent went on, and a
     // turn the user cut short is over, which is the screen going still
-    // while the hooks still say working.
+    // while the hooks still say working. A session waiting on its
+    // subagents has a still screen by nature, and is working all the same.
     if (session.needs !== null && work) {
       session.needs = null;
       session.working = true;
       changed(session);
     }
-    if (session.agent !== "codex" && session.working && work) stillLater(session);
+    if (
+      session.agent !== "codex" &&
+      session.working &&
+      work &&
+      !session.delegated
+    )
+      stillLater(session);
     return;
   }
   if (work && pulse.run >= WORK_WINDOWS - 1 && !session.working) {
@@ -1147,6 +1158,7 @@ export function exact(
     case "prompt":
       session.working = true;
       session.needs = null;
+      session.delegated = false;
       session.unread = false;
       // A new turn: whatever line the last one left is stale.
       session.note = null;
@@ -1155,19 +1167,40 @@ export function exact(
     case "stop":
       session.working = false;
       session.needs = null;
+      session.delegated = false;
       changed(session);
       if (session.note === null && note !== null) session.note = note;
       unseen(session);
       break;
+    case "delegated": {
+      // The turn ended, and the next starts when the subagents report:
+      // the session is working throughout, and nothing is waiting for the
+      // user. The line the agent left says what it is waiting on.
+      const idle = !session.working;
+      session.working = true;
+      session.needs = null;
+      session.delegated = true;
+      if (idle) changed(session);
+      if (session.note === null && note !== null) session.note = note;
+      break;
+    }
     case "permission": {
       const asking = session.needs !== "permission";
       session.working = false;
       session.needs = "permission";
+      session.delegated = false;
       if (asking) changed(session);
       unseen(session, asking);
       break;
     }
     case "idle":
+      // An agent waiting long enough to say so is not working, whatever
+      // was last heard: its subagents are gone, or it never had any.
+      if (session.working) {
+        session.working = false;
+        changed(session);
+      }
+      session.delegated = false;
       unseen(session);
       break;
   }

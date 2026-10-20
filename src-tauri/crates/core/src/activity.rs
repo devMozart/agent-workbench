@@ -28,8 +28,9 @@ const ROTATE_AT: u64 = 512 * 1024;
 pub struct SessionEvent {
     pub session_id: String,
     /// `prompt`: the user sent one, the agent is at work. `stop`: the agent
-    /// finished its turn. `permission`: it is asking. `idle`: it has been
-    /// waiting a while and said so.
+    /// finished its turn. `delegated`: it ended its turn with subagents of
+    /// its own still running, whose report starts the next one. `permission`:
+    /// it is asking. `idle`: it has been waiting a while and said so.
     pub kind: String,
     /// With a stop, the first line of what the agent last said, for the
     /// row: how the turn ended, in the agent's own words, when the agent
@@ -45,6 +46,7 @@ pub fn classify(line: &str) -> Option<SessionEvent> {
     let event = value.get("hook_event_name")?.as_str()?;
     let kind = match event {
         "UserPromptSubmit" => "prompt",
+        "Stop" if subagents_running(&value) => "delegated",
         "Stop" => "stop",
         "PermissionRequest" => "permission",
         "Notification" => match value.get("notification_type").and_then(|v| v.as_str()) {
@@ -54,7 +56,7 @@ pub fn classify(line: &str) -> Option<SessionEvent> {
         },
         _ => return None,
     };
-    let note = if kind == "stop" {
+    let note = if kind == "stop" || kind == "delegated" {
         value
             .get("last_assistant_message")
             .and_then(|v| v.as_str())
@@ -67,6 +69,26 @@ pub fn classify(line: &str) -> Option<SessionEvent> {
         kind: kind.to_string(),
         note,
     })
+}
+
+/// Whether a stop lists a subagent still running among the session's
+/// background tasks. Claude Code runs subagents in the background by
+/// default: the agent ends its turn to wait, and the report comes back as a
+/// prompt. A shell task is not that: the agent may well have stopped for
+/// the user with a server left running.
+fn subagents_running(value: &serde_json::Value) -> bool {
+    value
+        .get("background_tasks")
+        .and_then(|tasks| tasks.as_array())
+        .is_some_and(|tasks| {
+            tasks.iter().any(|task| {
+                task.get("type").and_then(|v| v.as_str()) == Some("subagent")
+                    && task
+                        .get("status")
+                        .and_then(|v| v.as_str())
+                        .is_none_or(|status| status == "running")
+            })
+        })
 }
 
 /// The first line of a message with something to say, as plain words: a
@@ -244,6 +266,24 @@ mod tests {
         assert_eq!(
             classify(r#"{"session_id":"s1","hook_event_name":"Stop","last_assistant_message":"\n## Done\n\nAll **green**."}"#).unwrap().note.as_deref(),
             Some("Done")
+        );
+        let delegated = classify(
+            r#"{"session_id":"s1","hook_event_name":"Stop","last_assistant_message":"Reviewing in the background.","background_tasks":[{"id":"a1","type":"subagent","status":"running","description":"Review","agent_type":"general-purpose"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(delegated.kind, "delegated");
+        assert_eq!(delegated.note.as_deref(), Some("Reviewing in the background."));
+        assert_eq!(
+            event(
+                r#"{"session_id":"s1","hook_event_name":"Stop","background_tasks":[{"id":"b1","type":"shell","status":"running","description":"dev server","command":"npm run dev"}]}"#
+            ),
+            Some(("s1".into(), "stop".into()))
+        );
+        assert_eq!(
+            event(
+                r#"{"session_id":"s1","hook_event_name":"Stop","background_tasks":[{"id":"a1","type":"subagent","status":"completed"}]}"#
+            ),
+            Some(("s1".into(), "stop".into()))
         );
         assert_eq!(
             classify(r#"{"session_id":"s1","hook_event_name":"UserPromptSubmit","last_assistant_message":"x"}"#).unwrap().note,
