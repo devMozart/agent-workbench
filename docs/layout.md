@@ -191,15 +191,16 @@ any other width garbles what it shows.
 
 ## Zoom
 
-<kbd>Cmd</kbd><kbd>=</kbd> and <kbd>Cmd</kbd><kbd>-</kbd> draw the terminal
-the keyboard is in a pixel larger or smaller, between 8 and 24, and
-<kbd>Cmd</kbd><kbd>0</kbd> puts it back at 12: the panel's shell when the
-panel has the keyboard, the agent on screen otherwise. A layout that puts
-= under Shift, or gives + a key of its own, zooms in on those as well.
+<kbd>Cmd</kbd><kbd>=</kbd> and <kbd>Cmd</kbd><kbd>-</kbd> make the text of
+the terminal the keyboard is in a pixel larger or smaller, from 8 to 24,
+and <kbd>Cmd</kbd><kbd>0</kbd> puts it back at 12. That terminal is the
+panel's shell when the panel has the keyboard, and the agent on screen
+otherwise. On a keyboard where = needs Shift, or where + has a key of its
+own, <kbd>Cmd</kbd> with either zooms in as well.
 
-Each terminal has its own size. A larger cell is a smaller grid, so the
-terminal is measured once and the process told its new size, as for a
-change of font, and the status bar names the size. An agent session's size
+Each terminal has its own size. A larger size fits fewer rows and columns,
+so the terminal measures its grid again and tells the process, as a change
+of [font](settings.md#font) does. The status bar names the new size. An agent session's size
 stays with the session, so resuming it, or a restart, brings it back at
 that size. A shell's lasts as long as the shell.
 

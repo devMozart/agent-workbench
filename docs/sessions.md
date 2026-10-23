@@ -69,12 +69,13 @@ groups first and the projects after.
 
 <kbd>Cmd</kbd><kbd>.</kbd> goes to the next session that needs you from
 anywhere and puts the keyboard in it. The sessions that need you are taken
-in order, those asking for a permission first and then the one waiting
-longest, and the chord goes to the one after the session on screen, round
-to the first again, so pressing it again moves on through all of them. A
-session an orchestrator started counts only while it asks for a
-permission, since the orchestrator answers for the rest. With nothing
-waiting the status bar says so.
+in order: those asking for a permission first, and within each kind the one
+that has waited longest first. The chord goes to the one after the session
+on screen, or to the first when the session on screen is not among them,
+and round to the first again after the last. A session an orchestrator
+started counts only while it asks for a permission, since the orchestrator
+answers for the rest. When no other session needs you, the status bar says
+so.
 
 ## After a restart
 

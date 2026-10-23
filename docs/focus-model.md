@@ -28,7 +28,7 @@ default preset:
 | <kbd>Cmd</kbd><kbd>F</kbd>                                              | Filter files, when a list pane has focus                    |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>F</kbd>                              | Search in files                                             |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>T</kbd>                              | Cycle theme: light, dark, system                            |
-| <kbd>Cmd</kbd><kbd>=</kbd> / <kbd>-</kbd> / <kbd>0</kbd>                | Zoom the terminal with the keyboard in, out, or back        |
+| <kbd>Cmd</kbd><kbd>=</kbd> / <kbd>-</kbd> / <kbd>0</kbd>                | Zoom the terminal that has focus in, out, or back           |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>                              | Open the command palette                                    |
 | <kbd>Cmd</kbd><kbd>,</kbd>                                              | Open the settings                                           |
 
@@ -51,26 +51,27 @@ The **Vim** preset lays movement between panes on <kbd>h</kbd>, <kbd>j</kbd>,
 changes to the right, the terminal below, the agent above it. The terminal
 panel toggles on <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>J</kbd>, and sessions
 step on <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>N</kbd> and <kbd>P</kbd>. The palette
-opens on <kbd>Cmd</kbd><kbd>;</kbd> there, since
-<kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd> steps sessions.
+opens on <kbd>Cmd</kbd><kbd>;</kbd> there, since <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>
+steps sessions.
 
 ## The command palette
 
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd> puts a field over the workbench
 listing every session and every action the keys can do. What is typed
 narrows the list to the entries holding every word of it, in any order, as
-the tree's filter does. A session is listed in the order the status view
-has it, with what its row says about it: the project, the machine and the
-account when there are any, the orchestrator that started it, and the line
-it left. Picking one does what a click on its row does. An action is
-listed with its chord, and picking one does what the chord does. At the
-top, going to the next session that needs you does what
-<kbd>Cmd</kbd><kbd>.</kbd> does, and says when nothing is waiting.
+[the tree's filter](layout.md#the-field-above-the-tree) does. A session is
+listed in the order the list by status has it, with what its row there
+says, as [sessions](sessions.md#by-status) describes. Picking one does what
+a click on its row does. An action is listed with its chord, and picking
+one does what the chord does. The first entry goes to the next session that
+needs you, as <kbd>Cmd</kbd><kbd>.</kbd> does (see
+[sessions](sessions.md#by-status)). It shows how many are waiting, and with
+none it cannot be picked.
 
 <kbd>Up</kbd> and <kbd>Down</kbd> move the cursor and <kbd>Enter</kbd>
 picks. <kbd>Escape</kbd> or the chord again puts the palette away, and the
 keyboard goes back where it was. While it is up, the palette has the
-keyboard and no other chord reaches past it. The highlighted entry stays
+keyboard and no other chord reaches past it. The cursor stays on
 the same entry while sessions change state under it.
 
 ## What the app never claims
