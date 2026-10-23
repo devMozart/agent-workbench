@@ -1451,7 +1451,7 @@ describe("how long past sessions stay listed", () => {
 });
 
 describe("the next session that needs you", () => {
-  it("is one asking first, then the one waiting longest, never the one on screen", () => {
+  it("lists askers first, then the longest waiting, the one on screen included", () => {
     vi.useFakeTimers();
     attention.focused = false;
     try {
@@ -1465,7 +1465,6 @@ describe("the next session that needs you", () => {
       const asking = live(A, "pty-3");
       exact("session-pty-3", "permission");
       vi.setSystemTime(1_003_000);
-      // The last one made is the one on screen.
       const here = live(B, "pty-4");
       exact("session-pty-4", "stop");
       expect(sessions.active).toBe(here.key);
@@ -1474,6 +1473,7 @@ describe("the next session that needs you", () => {
         asking.key,
         first.key,
         second.key,
+        here.key,
       ]);
       expect(nextNeedingYou()?.key).toBe(asking.key);
     } finally {
@@ -1481,9 +1481,95 @@ describe("the next session that needs you", () => {
     }
   });
 
+  it("steps from the one on screen, so repeating it reaches every waiting session", () => {
+    vi.useFakeTimers();
+    attention.focused = false;
+    try {
+      vi.setSystemTime(1_000_000);
+      const a = live(A, "pty-1");
+      exact("session-pty-1", "permission");
+      vi.setSystemTime(1_001_000);
+      const b = live(B, "pty-2");
+      exact("session-pty-2", "permission");
+      vi.setSystemTime(1_002_000);
+      const c = live(A, "pty-3");
+      exact("session-pty-3", "permission");
+      vi.setSystemTime(1_003_000);
+      const stopped = live(B, "pty-4");
+      exact("session-pty-4", "stop");
+      vi.setSystemTime(1_004_000);
+      const fresh = live(A, "pty-5");
+      expect(sessions.active).toBe(fresh.key);
+
+      attention.focused = true;
+      const path: string[] = [];
+      for (let step = 0; step < 8; step++) {
+        const next = nextNeedingYou();
+        expect(next).not.toBeNull();
+        path.push(next!.key);
+        select(next!.key);
+        viewed(next!.key);
+        vi.advanceTimersByTime(1000);
+      }
+      // Looking at an unread asker moves it behind the others that ask, so
+      // the walk passes the stopped session after the first one, and settles
+      // into going round the askers once it is read.
+      expect(path).toEqual(
+        [a, stopped, b, c, a, b, c, a].map((session) => session.key),
+      );
+      expect(new Set(path.slice(0, 4))).toEqual(
+        new Set([a, b, c, stopped].map((session) => session.key)),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves out what an orchestrator started unless it is asking", () => {
+    vi.useFakeTimers();
+    attention.focused = false;
+    try {
+      vi.setSystemTime(1_000_000);
+      const mine = live(A, "pty-1");
+      exact("session-pty-1", "stop");
+      vi.setSystemTime(1_001_000);
+      const quiet = live(A, "pty-2");
+      exact("session-pty-2", "stop");
+      vi.setSystemTime(1_002_000);
+      const asking = live(B, "pty-3");
+      exact("session-pty-3", "permission");
+      vi.setSystemTime(1_003_000);
+      live(B, "pty-4");
+
+      const conducted = (session: { key: string }) =>
+        session.key === quiet.key || session.key === asking.key;
+      expect(waitingOnYou(conducted).map((session) => session.key)).toEqual([
+        asking.key,
+        mine.key,
+      ]);
+      expect(nextNeedingYou(conducted)?.key).toBe(asking.key);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("is nobody when nothing waits", () => {
-    live(A, "pty-1");
+    const idle = live(A, "pty-1");
+    exact("session-pty-1", "stop");
+    viewed(idle.key);
+    live(A, "pty-2");
+    exact("session-pty-2", "prompt");
+    live(B, "pty-3");
     expect(waitingOnYou()).toEqual([]);
+    expect(nextNeedingYou()).toBeNull();
+  });
+
+  it("is nobody when the only one waiting is on screen", () => {
+    attention.focused = false;
+    const only = live(A, "pty-1");
+    exact("session-pty-1", "stop");
+    expect(sessions.active).toBe(only.key);
+    expect(waitingOnYou()).toHaveLength(1);
     expect(nextNeedingYou()).toBeNull();
   });
 });

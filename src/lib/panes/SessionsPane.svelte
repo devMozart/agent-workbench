@@ -5,7 +5,6 @@
   import type { AgentId } from "$lib/core";
   import {
     ago,
-    byKey,
     byStatus,
     close as closeSession,
     create,
@@ -16,7 +15,6 @@
     label,
     loadHistory,
     outsideFor,
-    select,
     sessions,
     statusLabel,
     disown,
