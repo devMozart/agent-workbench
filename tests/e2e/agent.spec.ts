@@ -1465,11 +1465,19 @@ test.describe("the command palette", () => {
   test("Escape opened over the viewer closes only the palette", async ({ page }) => {
     await page.keyboard.press(`${MOD}+d`);
     await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    const inChanges = () =>
+      page.evaluate(
+        () => document.activeElement?.closest("section[data-pane='changes']") !== null,
+      );
+    await expect.poll(inChanges).toBe(true);
     await chord(page);
     await expect(field(page)).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(page.getByTestId(PALETTE)).toHaveCount(0);
     await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    await expect(page.getByTestId("viewer")).toBeVisible();
+    expect((await page.getByTestId("viewer").boundingBox())!.width).toBeGreaterThan(0);
+    await expect.poll(inChanges).toBe(true);
   });
 
   test("a click on the scrim closes it and a click inside does not", async ({ page }) => {
@@ -1540,12 +1548,27 @@ test.describe("the command palette", () => {
 
   test("swallows other chords while it is open", async ({ page }) => {
     await chord(page);
+    // Added after the page's own listener, so it runs after it.
+    await page.evaluate(() => {
+      const seen: boolean[] = [];
+      (window as unknown as { __prevented: boolean[] }).__prevented = seen;
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "j" || e.key === ",") seen.push(e.defaultPrevented);
+      });
+    });
+    const before = await page.evaluate(() => window.__fake.writesTo.length);
     await page.keyboard.press(`${MOD}+j`);
     await expect(page.locator("section[data-pane='terminal']")).toBeHidden();
     await page.keyboard.press(`${MOD}+,`);
     await expect(page.getByTestId("settings")).toHaveCount(0);
     await expect(page.getByTestId(PALETTE)).toBeVisible();
     await expect(field(page)).toBeFocused();
+    expect(
+      await page.evaluate(() => (window as unknown as { __prevented: boolean[] }).__prevented),
+    ).toEqual([true, true]);
+    await page.keyboard.type("abc");
+    await expect(field(page)).toHaveValue("abc");
+    expect(await page.evaluate(() => window.__fake.writesTo.length)).toBe(before);
   });
 
   test("Down and Up move the selection and stop at the ends", async ({ page }) => {
