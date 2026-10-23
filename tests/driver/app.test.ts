@@ -213,6 +213,51 @@ describe("the real app", () => {
     await waitForText(driver, "echo: hello there");
   });
 
+  // The batch-file agent on Windows has no stty to ask.
+  it.skipIf(process.platform === "win32")(
+    "zooms the agent and tells its pty the grid that leaves",
+    async () => {
+      const { driver } = app;
+      const key = process.platform === "darwin" ? Key.COMMAND : Key.CONTROL;
+      // The visible terminal is the agent's; its session id keys the xterm.
+      const grid = () =>
+        driver.executeScript<{ cols: number; rows: number; size: number }>(
+          () => {
+            const id = document
+              .querySelector("[data-testid='terminal']:not(.hidden)")
+              ?.getAttribute("data-session");
+            const terminal = (
+              window as unknown as {
+                __WORKBENCH_TERMINALS__: Record<string, any>;
+              }
+            ).__WORKBENCH_TERMINALS__[id!];
+            return {
+              cols: terminal.cols,
+              rows: terminal.rows,
+              size: terminal.options.fontSize,
+            };
+          },
+        );
+      await driver.actions().keyDown(key).sendKeys("=").keyUp(key).perform();
+      await driver.wait(async () => (await grid()).size === 13, 5_000);
+      // The grid follows the font once the terminal has measured; let it
+      // stop moving before asking what the pty was told.
+      let last = "";
+      await driver.wait(async () => {
+        const { cols, rows } = await grid();
+        const now = `${rows} ${cols}`;
+        const settled = now === last;
+        last = now;
+        if (!settled) await driver.sleep(300);
+        return settled;
+      }, 5_000);
+      await type(driver, "size\n");
+      await waitForText(driver, last);
+      await driver.actions().keyDown(key).sendKeys("0").keyUp(key).perform();
+      await driver.wait(async () => (await grid()).size === 12, 5_000);
+    },
+  );
+
   // On Linux the system's notifications are calls on the session bus, which
   // the harness watches. A Windows toast is out of its reach.
   it.skipIf(process.platform !== "linux")(
