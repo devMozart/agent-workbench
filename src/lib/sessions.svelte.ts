@@ -1288,6 +1288,23 @@ export function byStatus(
   })).filter((group) => group.sessions.length > 0);
 }
 
+/** The sessions waiting on the user, in the order to go to them: one
+    asking for a permission before one that stopped, since it is blocked,
+    and the longest waiting first. The one on screen is not among them. */
+export function waitingOnYou(): Session[] {
+  return sessions.all
+    .filter((session) => session.key !== sessions.active && groupOf(session) === "needs")
+    .sort((a, b) => {
+      const asking = Number(b.needs === "permission") - Number(a.needs === "permission");
+      return asking !== 0 ? asking : a.changedAt - b.changedAt;
+    });
+}
+
+/** The session to go to next for the user, if any is waiting. */
+export function nextNeedingYou(): Session | null {
+  return waitingOnYou()[0] ?? null;
+}
+
 /** Test seam: the counter is module state and rows outlive a component. */
 export function reset() {
   pendingActivity.clear();

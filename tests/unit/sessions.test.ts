@@ -37,6 +37,8 @@ import {
   titled,
   byKey,
   byStatus,
+  nextNeedingYou,
+  waitingOnYou,
   close,
   closeProject,
   create,
@@ -1445,5 +1447,43 @@ describe("how long past sessions stay listed", () => {
     historyAnswer[1].modified = now - 8 * DAY;
     await loadHistory(A);
     expect(forProject(A)).toHaveLength(0);
+  });
+});
+
+describe("the next session that needs you", () => {
+  it("is one asking first, then the one waiting longest, never the one on screen", () => {
+    vi.useFakeTimers();
+    attention.focused = false;
+    try {
+      vi.setSystemTime(1_000_000);
+      const first = live(A, "pty-1");
+      exact("session-pty-1", "stop");
+      vi.setSystemTime(1_001_000);
+      const second = live(B, "pty-2");
+      exact("session-pty-2", "stop");
+      vi.setSystemTime(1_002_000);
+      const asking = live(A, "pty-3");
+      exact("session-pty-3", "permission");
+      vi.setSystemTime(1_003_000);
+      // The last one made is the one on screen.
+      const here = live(B, "pty-4");
+      exact("session-pty-4", "stop");
+      expect(sessions.active).toBe(here.key);
+
+      expect(waitingOnYou().map((session) => session.key)).toEqual([
+        asking.key,
+        first.key,
+        second.key,
+      ]);
+      expect(nextNeedingYou()?.key).toBe(asking.key);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is nobody when nothing waits", () => {
+    live(A, "pty-1");
+    expect(waitingOnYou()).toEqual([]);
+    expect(nextNeedingYou()).toBeNull();
   });
 });
