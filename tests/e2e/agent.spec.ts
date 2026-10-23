@@ -36,6 +36,7 @@ declare global {
   interface Window {
     __fake: {
       writes: string[];
+      writesTo: { ptyId: string; data: string }[];
       resizes: { cols: number; rows: number }[];
       spawns: {
         agent: string;
@@ -108,6 +109,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
 
       const fake: Window["__fake"] = {
         writes: [],
+        writesTo: [],
         resizes: [],
         spawns: [],
         killed: [],
@@ -208,8 +210,9 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
             sessionId: spawnOptions.session ?? `session-${ptyCount}`,
           };
         },
-        write: async (_id: string, data: string) => {
+        write: async (id: string, data: string) => {
           fake.writes.push(data);
+          fake.writesTo.push({ ptyId: id, data });
         },
         orchestratorDir: async () => "/home/ada/.agent-workbench/orchestrator",
         resize: async (_id: string, cols: number, rows: number) => {
@@ -776,6 +779,21 @@ test.describe("several sessions in one project", () => {
     await expect.poll(() => typed(page)).toBe("a");
   });
 
+  test("cycling from the terminal leaves the keyboard in the one switched to", async ({
+    page,
+  }) => {
+    await page.locator(`${AGENT} .xterm-helper-textarea`).last().focus();
+    await page.keyboard.press(`${MOD}+Shift+ArrowDown`);
+    await page.keyboard.type("q");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__fake.writesTo.filter((w) => w.data.includes("q")),
+        ),
+      )
+      .toEqual([{ ptyId: "pty-1", data: "q" }]);
+  });
+
   test("one crashing leaves the other running", async ({ page }) => {
     await page.evaluate(() => window.__fake.end("pty-1", 1, false));
 
@@ -874,6 +892,23 @@ test.describe("working, and waiting for you", () => {
     await expect(rows(page).first()).not.toContainText("waiting for you");
     await expect(page.getByTestId("waiting-readout")).toHaveCount(0);
     expect((await page.evaluate(() => window.__fake.badges)).at(-1)).toBeNull();
+  });
+
+  test("jumping to the session waiting leaves the keyboard in its terminal", async ({
+    page,
+  }) => {
+    await page.locator(`${AGENT} .xterm-helper-textarea`).last().focus();
+    await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
+    await expect(rows(page).first().locator(".dot")).toHaveClass(/unread/);
+    await page.keyboard.press(`${MOD}+.`);
+    await page.keyboard.type("q");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__fake.writesTo.filter((w) => w.data.includes("q")),
+        ),
+      )
+      .toEqual([{ ptyId: "pty-1", data: "q" }]);
   });
 
   test("says so through the system only while the window is in the background", async ({

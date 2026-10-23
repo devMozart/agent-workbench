@@ -308,13 +308,18 @@
   // the keyboard again re-runs this: a dialog closing leaves the document's
   // focus on nothing. Another control of the same pane, a splitter or a
   // button, keeps the keyboard it was given; the terminal takes it from
-  // anywhere else.
+  // anywhere else, another terminal's own input included: that one is about
+  // to be hidden and would leave the keyboard on nothing.
   $effect(() => {
     layout.focusRequest;
     if (!focused || !active || !shown || !terminal || !host) return;
     const owner = document.activeElement;
     if (owner !== null && owner !== document.body && !host.contains(owner)) {
-      if (host.closest("section[data-pane]")?.contains(owner)) return;
+      if (
+        host.closest("section[data-pane]")?.contains(owner) &&
+        owner.closest("[data-terminal]") === null
+      )
+        return;
     }
     untrack(() => terminal!.focus());
   });

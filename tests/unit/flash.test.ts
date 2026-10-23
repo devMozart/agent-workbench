@@ -25,4 +25,14 @@ describe("a word in the status bar", () => {
     vi.advanceTimersByTime(FLASH_MS);
     expect(flash.text).toBeNull();
   });
+
+  it("clears and shows again when the same word is said twice", () => {
+    say("x");
+    say("x");
+    expect(flash.text).toBeNull();
+    vi.advanceTimersByTime(0);
+    expect(flash.text).toBe("x");
+    vi.advanceTimersByTime(FLASH_MS);
+    expect(flash.text).toBeNull();
+  });
 });

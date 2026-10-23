@@ -9,9 +9,20 @@ export const FLASH_MS = 1500;
 export const flash = $state({ text: null as string | null });
 
 let timer: ReturnType<typeof setTimeout> | null = null;
+let again: ReturnType<typeof setTimeout> | null = null;
 
+/** Shows a word. The same word again is cleared and set a task later, so
+    the live region's content changes and is announced once more. */
 export function say(text: string) {
-  flash.text = text;
+  if (again !== null) clearTimeout(again);
+  again = null;
+  if (flash.text === text) {
+    flash.text = null;
+    again = setTimeout(() => {
+      flash.text = text;
+      again = null;
+    }, 0);
+  } else flash.text = text;
   if (timer !== null) clearTimeout(timer);
   timer = setTimeout(() => {
     flash.text = null;
@@ -21,6 +32,8 @@ export function say(text: string) {
 
 /** Test seam. */
 export function resetFlash() {
+  if (again !== null) clearTimeout(again);
+  again = null;
   if (timer !== null) clearTimeout(timer);
   timer = null;
   flash.text = null;
