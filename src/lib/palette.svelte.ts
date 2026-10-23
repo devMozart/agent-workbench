@@ -35,6 +35,12 @@ export function closePalette() {
   palette.open = false;
 }
 
+/** Test seam. */
+export function resetPalette() {
+  palette.open = false;
+  palette.query = "";
+}
+
 /** Where a session belongs, the machine and account it runs on, who started
     it, and what it left. */
 function detailOf(session: Session): string {

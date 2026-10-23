@@ -8,6 +8,7 @@ import {
   openPalette,
   palette,
   paletteItems,
+  resetPalette,
 } from "$lib/palette.svelte";
 import { matches } from "$lib/files.svelte";
 import { orchestrator } from "$lib/orchestrator.svelte";
@@ -28,7 +29,7 @@ beforeEach(() => {
   resetConductor();
   orchestrator.dir = null;
   resetKeys();
-  closePalette();
+  resetPalette();
   attention.focused = true;
 });
 
