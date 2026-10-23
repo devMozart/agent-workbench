@@ -21,6 +21,7 @@
     tokenReader,
   } from "$lib/terminal";
   import { theme } from "$lib/theme.svelte";
+  import { DEFAULT_SIZE } from "$lib/zoom.svelte";
 
   /**
    * One xterm over one pty. What the pty runs is the caller's business: the
@@ -52,6 +53,8 @@
     /** A reference to a place in a file in the output, `path:line`, was
         opened with the same modifier and click as a link. */
     onFileRef?: (path: string, line: number) => void;
+    /** How large the terminal is drawn, in pixels: its own zoom. */
+    fontSize?: number;
   }
 
   let {
@@ -65,6 +68,7 @@
     onAttention,
     newlineOnShiftEnter = false,
     onFileRef,
+    fontSize = DEFAULT_SIZE,
   }: Props = $props();
 
   /** What WebGL here draws with, unmasked where the browser allows. */
@@ -110,7 +114,7 @@
       // thickens the regular one, and the glyphs no longer fit their cells.
       fontWeight: 400,
       fontWeightBold: 700,
-      fontSize: 12,
+      fontSize,
       lineHeight: 1.35,
       scrollback: 10_000,
       theme: buildTheme(tokenReader(document.documentElement)),
@@ -327,6 +331,18 @@
       terminal!.options.fontFamily = getComputedStyle(document.body)
         .getPropertyValue("--mono")
         .trim();
+      queueMicrotask(() => measure());
+    });
+  });
+
+  // The terminal is drawn at its own size. A larger cell is a smaller grid,
+  // so the grid is measured again and the process told what it now has.
+  $effect(() => {
+    const size = fontSize;
+    if (!terminal) return;
+    untrack(() => {
+      if (terminal!.options.fontSize === size) return;
+      terminal!.options.fontSize = size;
       queueMicrotask(() => measure());
     });
   });
