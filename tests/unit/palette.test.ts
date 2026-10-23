@@ -80,12 +80,21 @@ describe("what the palette lists", () => {
   });
 
   it("tells two remote projects apart by their host", () => {
-    create("ssh://a/home/x/proj");
-    create("ssh://b/home/x/proj");
-    const found = paletteItems("b").filter((item) => item.kind === "session");
+    create("ssh://alpha/home/x/proj");
+    create("ssh://beta/home/x/proj");
+    const found = paletteItems("beta proj").filter((item) => item.kind === "session");
     expect(found).toHaveLength(1);
-    expect(found[0].kind === "session" && found[0].detail).toContain("b");
-    expect(paletteItems("a proj").filter((item) => item.kind === "session")).toHaveLength(1);
+    expect(found[0].kind === "session" && found[0].detail).toContain("beta");
+    expect(paletteItems("alpha").filter((item) => item.kind === "session")).toHaveLength(1);
+  });
+
+  it("puts the account in the line and finds the session by it", () => {
+    create(B);
+    const own = create(A, null, undefined, null, null, null, "work");
+    const found = paletteItems("work").filter((item) => item.kind === "session");
+    expect(found).toHaveLength(1);
+    expect(found[0].kind === "session" && found[0].session.key).toBe(own.key);
+    expect(found[0].kind === "session" && found[0].detail).toContain("work");
   });
 
   it("reads an orchestrator's own project as the orchestrator", () => {
