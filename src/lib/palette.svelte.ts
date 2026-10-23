@@ -1,4 +1,4 @@
-import { conducted, startedFor } from "$lib/conductor.svelte";
+import { startedFor } from "$lib/conductor.svelte";
 import { ACTIONS, chordFor, describe, type ActionKey } from "$lib/keys.svelte";
 import { matches } from "$lib/files.svelte";
 import { hostOf } from "$lib/remote.svelte";
@@ -66,7 +66,7 @@ export function paletteItems(query: string): PaletteItem[] {
     detail: JUMP.group,
     // The jump goes to sessions other than the one on screen, so those are
     // what it counts.
-    waiting: waitingOnYou(conducted).filter((session) => session.key !== sessions.active).length,
+    waiting: waitingOnYou().filter((session) => session.key !== sessions.active).length,
     chord: describe(chordFor("session.attention")),
   };
   const rows = byStatus(conducting)

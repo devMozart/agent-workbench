@@ -72,10 +72,9 @@ puts the keyboard in it. The sessions that need you are taken
 in order: those asking for a permission first, and within each kind the one
 that has waited longest first. The chord goes to the one after the session
 on screen, or to the first when the session on screen is not among them,
-and round to the first again after the last. A session an orchestrator
-started counts only while it asks for a permission, since the orchestrator
-answers for the rest. When no other session needs you, the status bar says
-so. While a dialog or a question over the agent pane is up, the chord does nothing.
+and round to the first again after the last. When no other session needs
+you, the status bar says so. While a dialog or a question over the agent
+pane is up, the chord does nothing.
 
 ## After a restart
 

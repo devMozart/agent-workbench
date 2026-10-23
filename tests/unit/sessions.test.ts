@@ -1542,34 +1542,6 @@ describe("the next session that needs you", () => {
     }
   });
 
-  it("leaves out what an orchestrator started unless it is asking", () => {
-    vi.useFakeTimers();
-    attention.focused = false;
-    try {
-      vi.setSystemTime(1_000_000);
-      const mine = live(A, "pty-1");
-      exact("session-pty-1", "stop");
-      vi.setSystemTime(1_001_000);
-      const quiet = live(A, "pty-2");
-      exact("session-pty-2", "stop");
-      vi.setSystemTime(1_002_000);
-      const asking = live(B, "pty-3");
-      exact("session-pty-3", "permission");
-      vi.setSystemTime(1_003_000);
-      live(B, "pty-4");
-
-      const conducted = (session: { key: string }) =>
-        session.key === quiet.key || session.key === asking.key;
-      expect(waitingOnYou(conducted).map((session) => session.key)).toEqual([
-        asking.key,
-        mine.key,
-      ]);
-      expect(nextNeedingYou(conducted)?.key).toBe(asking.key);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it("is nobody when nothing waits", () => {
     const idle = live(A, "pty-1");
     exact("session-pty-1", "stop");

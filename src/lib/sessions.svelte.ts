@@ -1293,18 +1293,11 @@ export function byStatus(
 
 /** The sessions that need the user: those asking for a permission, and
     those that stopped, ended or rang while nobody looked. Askers come
-    first, then the longest unchanged. A session an orchestrator started
-    counts only while it is asking. The one on screen is included while it
-    still needs the user. */
-export function waitingOnYou(
-  conducted: (session: Session) => boolean = () => false,
-): Session[] {
+    first, then the longest unchanged. The one on screen is included while
+    it still needs the user. */
+export function waitingOnYou(): Session[] {
   return sessions.all
-    .filter(
-      (session) =>
-        groupOf(session) === "needs" &&
-        !(conducted(session) && session.needs !== "permission"),
-    )
+    .filter((session) => groupOf(session) === "needs")
     .sort((a, b) => {
       const asking = Number(b.needs === "permission") - Number(a.needs === "permission");
       return asking !== 0 ? asking : a.changedAt - b.changedAt;
@@ -1314,10 +1307,8 @@ export function waitingOnYou(
 /** The session after the one on screen in the order of `waitingOnYou`,
     wrapping round to the first. With the one on screen not among them it is
     the first. Null when none is left to go to. */
-export function nextNeedingYou(
-  conducted: (session: Session) => boolean = () => false,
-): Session | null {
-  const waiting = waitingOnYou(conducted);
+export function nextNeedingYou(): Session | null {
+  const waiting = waitingOnYou();
   const at = waiting.findIndex((session) => session.key === sessions.active);
   const next = at === -1 ? waiting[0] : waiting[(at + 1) % waiting.length];
   return next === undefined || next.key === sessions.active ? null : next;

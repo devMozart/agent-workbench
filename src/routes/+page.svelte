@@ -16,7 +16,7 @@
   import ConductAsk from "$lib/components/ConductAsk.svelte";
   import SettingsAsk from "$lib/components/SettingsAsk.svelte";
   import UserStyles from "$lib/components/UserStyles.svelte";
-  import { conducted, conductor, handle as conductRequested } from "$lib/conductor.svelte";
+  import { conductor, handle as conductRequested } from "$lib/conductor.svelte";
   import { handle as browserRequested } from "$lib/browserTools.svelte";
   import { handle as settingsRequested, settingsAsk } from "$lib/settingsTools.svelte";
   import { load as loadOrchestrator } from "$lib/orchestrator.svelte";
@@ -544,7 +544,7 @@
   /** The next session waiting on the user, brought forward with the
       keyboard in it. */
   function nextSession() {
-    const next = nextNeedingYou(conducted);
+    const next = nextNeedingYou();
     if (next === null) {
       say("Nothing else needs you");
       return;

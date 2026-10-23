@@ -718,12 +718,6 @@ export function startedFor(key: string | null): string | null {
 // for the user over it unless it needs a permission.
 onDirected((session) => startedFor(session.key) !== null);
 
-/** Whether an orchestrator started the session, for the callers that treat
-    those apart: the jump to who needs you and the palette's count. */
-export function conducted(session: Session): boolean {
-  return startedFor(session.key) !== null;
-}
-
 /** The rows a session started, running or not. */
 export function startedBy(sessionId: string): Session[] {
   return sessions.all.filter(
