@@ -255,4 +255,24 @@ describe("actions a stored table does not have yet", () => {
     expect(chordFor("review")).toEqual(chord("p", true));
     expect(chordFor("palette")).toEqual(chord(";"));
   });
+
+  it("never land on a chord the table gives to another action", () => {
+    adoptKeys(without({ ...PRESETS.default, theme: chord("=") }, "zoom.in", "zoom.out", "zoom.reset"));
+    expect(chordFor("theme")).toEqual(chord("="));
+    expect(chordFor("zoom.in")).not.toEqual(chord("="));
+    expect(tableProblem(keys.bindings)).toBeNull();
+  });
+
+  it("keep the chord the table holds for another action, a dot included", () => {
+    adoptKeys(without({ ...PRESETS.default, review: chord(".") }, "session.attention"));
+    expect(chordFor("review")).toEqual(chord("."));
+    expect(chordFor("session.attention")).not.toEqual(chord("."));
+    expect(tableProblem(keys.bindings)).toBeNull();
+  });
+
+  it("give exactly the default preset for an empty table", () => {
+    adoptKeys({});
+    expect(keys.bindings).toEqual(PRESETS.default);
+    expect(keys.preset).toBe("default");
+  });
 });

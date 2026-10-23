@@ -106,8 +106,8 @@ export function actionFor(key: ActionKey): Action {
   return ACTION_OF[key];
 }
 
-/** Where = sits under Shift, or + has a key of its own, the chord on = is
-    pressed as one of those. Read as the plain = when nothing holds it. */
+/** On a layout where = needs Shift, or + has a key of its own, Cmd+= arrives
+    as + or Shift+=. Those read as the plain = when no chord holds them. */
 function plainEquals(chord: Chord): Chord | null {
   if (chord.key === "+" || (chord.key === "=" && chord.shift)) {
     return { key: "=", shift: false, alt: chord.alt };

@@ -330,9 +330,11 @@ export function describe(chord: Chord, mac: boolean = isMac()): string {
 
 /** A stored table as a whole keymap. Every action it has a chord for takes
     it. An action it lacks takes the chord of the preset the rest of the
-    table follows, or another preset's where that chord is already held, so
-    an action the table never had does not land on a chord the table gives
-    to something else. */
+    table follows, or another preset's where that chord is already held, or
+    one of those with Alt, or with Shift and Alt, so an action the table
+    never had does not land on a chord the table gives to something else.
+    Only when every one of those is held does it take the followed preset's
+    chord regardless, and the table then fails `tableProblem`. */
 function fromTable(table: unknown): Keymap {
   const stored: Partial<Keymap> = {};
   if (typeof table === "object" && table !== null) {
@@ -347,9 +349,11 @@ function fromTable(table: unknown): Keymap {
     Object.values(bindings).some((other) => other !== undefined && sameChord(other, chord));
   for (const { key } of ACTIONS) {
     if (bindings[key] !== undefined) continue;
+    const presets = [PRESETS[followed][key], ...Object.values(PRESETS).map((preset) => preset[key])];
     const candidates = [
-      PRESETS[followed][key],
-      ...Object.values(PRESETS).map((preset) => preset[key]),
+      ...presets,
+      ...presets.map((chord) => ({ ...chord, alt: true })),
+      ...presets.map((chord) => ({ ...chord, shift: true, alt: true })),
     ];
     bindings[key] = { ...(candidates.find((chord) => !held(chord)) ?? PRESETS[followed][key]) };
   }

@@ -47,6 +47,18 @@ describe("resolveAction", () => {
     expect(resolveAction(mod("=", { shiftKey: true }))).toEqual({ type: "cycleTheme" });
   });
 
+  it("resolves the new chords with Ctrl where Ctrl is the modifier", () => {
+    const ctrl = (key: string, extra: Partial<KeyState> = {}): KeyState => ({
+      key,
+      ctrlKey: true,
+      ...extra,
+    });
+    expect(resolveAction(ctrl("p", { shiftKey: true }), { mac: false })).toEqual({
+      type: "palette",
+    });
+    expect(resolveAction(ctrl("="), { mac: false })).toEqual({ type: "zoom", step: 1 });
+  });
+
   it("opens the palette on Cmd+; in the vim preset", () => {
     applyPreset("vim");
     expect(resolveAction(mod(";"))).toEqual({ type: "palette" });
