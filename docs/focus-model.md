@@ -75,8 +75,9 @@ keyboard and no chord reaches past it, except that Settings opened from the
 app's menu puts the palette away first. The cursor stays on the same entry
 while sessions change state under it.
 
-While a dialog such as the settings is up, the palette's chord and
-<kbd>Cmd</kbd><kbd>.</kbd> do nothing, so the keyboard stays in the dialog.
+While a dialog, or a question over the agent pane, is up, the palette's
+chord does not open it and <kbd>Cmd</kbd><kbd>.</kbd> does nothing, so the
+keyboard stays where the dialog has it.
 
 ## What the app never claims
 

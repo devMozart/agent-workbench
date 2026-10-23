@@ -203,8 +203,8 @@ so the terminal measures its grid again and tells the process, as a change
 of [font](settings.md#font) does. The status bar names the new size.
 An agent session's size stays with the session, so resuming it, or a
 restart, brings it back at that size. A shell's lasts as long as the
-shell. This window keeps the sizes, not the settings file, so they do not
-follow to another machine the way chords do.
+shell. The sizes are kept in the window's own storage, not in the settings
+file.
 
 ## The field above the tree
 

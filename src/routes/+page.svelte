@@ -441,9 +441,13 @@
   function onKeydown(e: KeyboardEvent) {
     const action = resolveAction(e, { focus: layout.focus, reviewing });
     if (!action) return;
-    // The palette and the jump move the keyboard, so with a dialog up they
-    // do nothing and the webview gets nothing from them either.
-    if ((action.type === "palette" || action.type === "attention") && dialogUp()) {
+    // Opening the palette and the jump move the keyboard, so with a dialog up
+    // they do nothing and the webview gets nothing from them either. The
+    // chord still puts an open palette away.
+    if (
+      (action.type === "attention" || (action.type === "palette" && !palette.open)) &&
+      dialogUp()
+    ) {
       e.preventDefault();
       return;
     }
