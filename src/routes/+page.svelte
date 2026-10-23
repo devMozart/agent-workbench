@@ -14,7 +14,7 @@
   import ConductAsk from "$lib/components/ConductAsk.svelte";
   import SettingsAsk from "$lib/components/SettingsAsk.svelte";
   import UserStyles from "$lib/components/UserStyles.svelte";
-  import { conductor, handle as conductRequested } from "$lib/conductor.svelte";
+  import { conducted, conductor, handle as conductRequested } from "$lib/conductor.svelte";
   import { handle as browserRequested } from "$lib/browserTools.svelte";
   import { handle as settingsRequested } from "$lib/settingsTools.svelte";
   import { load as loadOrchestrator } from "$lib/orchestrator.svelte";
@@ -36,12 +36,12 @@
   import { loadMedia, presented } from "$lib/media.svelte";
   import { initBrowser } from "$lib/browser.svelte";
   import { loadNotices } from "$lib/notice.svelte";
-  import { loadZoom } from "$lib/zoom.svelte";
+  import { loadZoom, zoomed } from "$lib/zoom.svelte";
   import { handle as handleDrag } from "$lib/drops.svelte";
   import { stash } from "$lib/exits";
-  import { isMac, resolveAction } from "$lib/keymap";
+  import { isMac, resolveAction, type Action } from "$lib/keymap";
   import { keys } from "$lib/keys.svelte";
-  import { flash } from "$lib/flash.svelte";
+  import { flash, say } from "$lib/flash.svelte";
   import { openSettings, settings } from "$lib/settings.svelte";
   import { cycleTheme, theme } from "$lib/theme.svelte";
   import {
@@ -62,6 +62,7 @@
     followHistory,
     refreshHistory,
     identified,
+    nextNeedingYou,
     onWaiting,
     sessions,
     unreadCount,
@@ -73,7 +74,7 @@
   import { announce } from "$lib/notify.svelte";
   import { PANE_MOTION, reduced } from "$lib/motion";
   import { cycle as cycleShell, ended as shellEnded, terminals } from "$lib/terminals.svelte";
-  import { workspace } from "$lib/workspace.svelte";
+  import { goTo, workspace } from "$lib/workspace.svelte";
   import {
     CONTROLS_INSET,
     DEFAULT,
@@ -418,6 +419,11 @@
     const action = resolveAction(e, { focus: layout.focus, reviewing });
     if (!action) return;
     e.preventDefault();
+    perform(action);
+  }
+
+  /** Does what a bound action does, from its chord or from the palette. */
+  function perform(action: Action) {
     switch (action.type) {
       case "focus":
         // Going to the sessions pane opens it out of its fold. While
@@ -480,7 +486,37 @@
       case "exitReview":
         closeViewer();
         break;
+      case "attention":
+        nextSession();
+        break;
+      case "zoom":
+        zoomTerminal(action.step);
+        break;
     }
+  }
+
+  /** The next session waiting on the user, brought forward with the
+      keyboard in it. */
+  function nextSession() {
+    const next = nextNeedingYou(conducted);
+    if (next === null) {
+      say("Nothing needs you");
+      return;
+    }
+    goTo(next.key);
+    focusPane("agent");
+  }
+
+  /** Zooms the terminal the keyboard belongs to: the panel's shell when the
+      panel has it, the agent on screen otherwise. */
+  function zoomTerminal(step: 1 | -1 | 0) {
+    if (layout.focus === "terminal" && terminals.active !== null) {
+      say(`${zoomed(terminals.active, null, step)} px`);
+      return;
+    }
+    const session = activeSession();
+    if (session === null) return;
+    say(`${zoomed(session.key, session.id, step)} px`);
   }
 
   // Clamp against the grid's own content box rather than the window: the frame
@@ -613,14 +649,12 @@
       >account: {accountLabel(activeSession()?.account ?? null)}</span
     >
   {/if}
-  {#if flash.text !== null}
-    <span class="flash" data-testid="flash-readout">{flash.text}</span>
-  {/if}
   {#if unreadCount() > 0}
     <span class="waiting" data-testid="waiting-readout">
       {unreadCount()} waiting for you
     </span>
   {/if}
+  <span class="flash" role="status" data-testid="flash-readout">{flash.text ?? ""}</span>
 </footer>
 
 <style>

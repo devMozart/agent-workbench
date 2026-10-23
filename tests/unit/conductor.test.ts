@@ -7,6 +7,7 @@ import {
   OUTCOME_ASK,
   allow,
   allowedProjects,
+  conducted,
   conductor,
   handle,
   loadStarted,
@@ -826,6 +827,17 @@ describe("the parent link", () => {
     stopAll("caller-1");
     expect(killed).toEqual(["pty-1", "pty-2"]);
     expect(sessions.all.map((session) => session.id)).toEqual(["sid-3"]);
+  });
+});
+
+describe("telling conducted sessions apart", () => {
+  it("is true for a session an orchestrator started and false for the user's", () => {
+    const started = live(A, "pty-1", "sid-1");
+    const own = live(A, "pty-2", "sid-2");
+    conductor.startedBy[started.key] = "caller-1";
+
+    expect(conducted(started)).toBe(true);
+    expect(conducted(own)).toBe(false);
   });
 });
 
