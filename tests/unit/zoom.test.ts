@@ -80,9 +80,42 @@ describe("a terminal's size", () => {
     );
     loadZoom();
     expect(zoom.kept).toEqual({ b: { size: 14, at: 2 } });
+    localStorage.setItem(KEY, '{"__proto__":{"size":14,"at":1},"d":{"size":13.5,"at":1}}');
+    resetZoom();
+    loadZoom();
+    expect(zoom.kept).toEqual({});
+    expect(Object.getPrototypeOf(zoom.kept)).not.toEqual({ size: 14, at: 1 });
+    for (const bad of ["[]", "null"]) {
+      localStorage.setItem(KEY, bad);
+      resetZoom();
+      loadZoom();
+      expect(zoom.kept).toEqual({});
+    }
     localStorage.setItem(KEY, "{not json");
     resetZoom();
     loadZoom();
     expect(zoom.kept).toEqual({});
+  });
+
+  it("prefers its row's own size to the one kept for its id", () => {
+    zoom.kept["id-1"] = { size: 15, at: 1 };
+    expect(sizeOf("s1", "id-1")).toBe(15);
+    zoom.rows["s1"] = 9;
+    expect(sizeOf("s1", "id-1")).toBe(9);
+  });
+
+  it("keeps nothing for an id when its row has no size", () => {
+    identifiedZoom("s1", "minted", 5);
+    expect(zoom.kept).toEqual({});
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("is trimmed to the most recent when loaded over-full", () => {
+    const stored: Record<string, { size: number; at: number }> = {};
+    for (let i = 0; i <= MOST_KEPT; i += 1) stored[`id-${i}`] = { size: 13, at: i };
+    localStorage.setItem(KEY, JSON.stringify(stored));
+    loadZoom();
+    expect(Object.keys(zoom.kept)).toHaveLength(MOST_KEPT);
+    expect(zoom.kept["id-0"]).toBeUndefined();
   });
 });

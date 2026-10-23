@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Transcript } from "$lib/core";
 import { applyDetect, resetAgent } from "$lib/agent.svelte";
 import { stash } from "$lib/exits";
+import { resetZoom, zoom, zoomed } from "$lib/zoom.svelte";
 import { attention, resetAttention } from "$lib/attention.svelte";
 import { adoptAccounts, reset as resetAccounts } from "$lib/accounts.svelte";
 import {
@@ -105,6 +106,7 @@ beforeEach(() => {
   reset();
   resetAttention();
   resetAccounts();
+  resetZoom();
   killed.length = 0;
   historyReads = 0;
   historyAnswer = [];
@@ -171,6 +173,13 @@ describe("creating sessions", () => {
     expect(session.id).toBeNull();
     expect(started(session.key, "pty-1", "fresh-id")).toBe(true);
     expect(session.id).toBe("fresh-id");
+  });
+
+  it("keeps a size set before it started under the id it starts with", () => {
+    const session = create(A);
+    zoomed(session.key, null, 1);
+    started(session.key, "pty-1", "id-fresh");
+    expect(zoom.kept["id-fresh"]?.size).toBe(13);
   });
 
   it("knows its id from the start when resuming", () => {
@@ -641,6 +650,14 @@ describe("an agent that mints its own id", () => {
     expect(isMine(A, "cx-1")).toBe(true);
     expect(label(session)).toBe("Refactor billing");
     expect(sessions.names["cx-1"]).toBe("Refactor billing");
+  });
+
+  it("keeps a size set before the id was minted under the minted id", () => {
+    const session = create(A, null, "codex");
+    started(session.key, "pty-1", null);
+    zoomed(session.key, null, 1);
+    identified("pty-1", "minted", null);
+    expect(zoom.kept["minted"]?.size).toBe(13);
   });
 
   it("ignores an identification for a pty it does not have", () => {

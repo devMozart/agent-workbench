@@ -797,6 +797,7 @@ export function started(
   changed(session);
   if (sessionId !== null) {
     session.id = sessionId;
+    identifiedZoom(key, sessionId);
     adopt(session.project, sessionId);
     replayActivity(sessionId);
   }

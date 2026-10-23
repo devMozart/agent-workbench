@@ -4,9 +4,8 @@
  * A size is held by the row it belongs to while the window runs. An agent
  * session's size is also kept by the session's id in the window's storage,
  * so a session resumed, or brought back after a restart, comes back at the
- * size it had. A shell does not outlive the window, and neither does its
- * size. Only sizes off the default are kept, and only for the sessions
- * changed most recently.
+ * size it had. A shell's size is not kept. Only sizes off the default are
+ * kept, and only for the sessions changed most recently.
  */
 
 export const DEFAULT_SIZE = 12;
@@ -67,12 +66,16 @@ export function identifiedZoom(key: string, id: string, now = Date.now()) {
 function keep(id: string, size: number, now: number) {
   if (size === DEFAULT_SIZE) delete zoom.kept[id];
   else zoom.kept[id] = { size, at: now };
-  const ids = Object.keys(zoom.kept);
-  if (ids.length > MOST_KEPT) {
-    ids.sort((a, b) => zoom.kept[b].at - zoom.kept[a].at);
-    for (const old of ids.slice(MOST_KEPT)) delete zoom.kept[old];
-  }
+  prune();
   save();
+}
+
+/** Drops the sizes set longest ago once there are more than the storage keeps. */
+function prune() {
+  const ids = Object.keys(zoom.kept);
+  if (ids.length <= MOST_KEPT) return;
+  ids.sort((a, b) => zoom.kept[b].at - zoom.kept[a].at);
+  for (const old of ids.slice(MOST_KEPT)) delete zoom.kept[old];
 }
 
 function save() {
@@ -96,9 +99,11 @@ export function loadZoom() {
     if (typeof stored !== "object" || stored === null) return;
     const kept: Record<string, Kept> = {};
     for (const [id, value] of Object.entries(stored)) {
+      if (id === "__proto__") continue;
       if (isKept(value)) kept[id] = { size: value.size, at: value.at };
     }
     zoom.kept = kept;
+    prune();
   } catch {
     // A corrupt entry costs the sizes and nothing more.
   }
