@@ -9,6 +9,7 @@ import {
 } from "$lib/core";
 import { accountOf, dirFor, names } from "$lib/accounts.svelte";
 import { persist } from "$lib/persist";
+import { identifiedZoom } from "$lib/zoom.svelte";
 import { AGENTS, installed } from "$lib/agent.svelte";
 import { attention } from "$lib/attention.svelte";
 import { isReady } from "$lib/agent.svelte";
@@ -503,6 +504,7 @@ export function identified(
   const session = sessions.all.find((candidate) => candidate.ptyId === ptyId);
   if (session === undefined) return;
   session.id = sessionId;
+  identifiedZoom(session.key, sessionId);
   adopt(session.project, sessionId);
   replayActivity(sessionId);
   if (title !== null) named(session.key, title);

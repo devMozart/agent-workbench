@@ -36,6 +36,7 @@
   import { loadMedia, presented } from "$lib/media.svelte";
   import { initBrowser } from "$lib/browser.svelte";
   import { loadNotices } from "$lib/notice.svelte";
+  import { loadZoom } from "$lib/zoom.svelte";
   import { handle as handleDrag } from "$lib/drops.svelte";
   import { stash } from "$lib/exits";
   import { isMac, resolveAction } from "$lib/keymap";
@@ -108,6 +109,7 @@
   // and which words to the user were already taken.
   loadMedia();
   loadNotices();
+  loadZoom();
 
   // What is on screen, on record for the agent's tools and for the core
   // to watch where it is, and what runs under the sessions, for the
