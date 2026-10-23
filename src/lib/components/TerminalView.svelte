@@ -298,6 +298,7 @@
     // component, and a difference is sent.
     sent = spawned;
     await tick();
+    if (!terminal) return;
     measure();
     if (focused && active && shown) terminal.focus();
   }
