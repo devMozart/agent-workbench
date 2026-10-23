@@ -21,8 +21,13 @@ import {
 import { conductor, resetConductor } from "$lib/conductor.svelte";
 import {
   create,
+  exact,
+  noted,
+  rang,
   reset as resetSessions,
+  sessions,
   started,
+  unreadCount,
   type Session,
 } from "$lib/sessions.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
@@ -208,14 +213,15 @@ describe("what an orchestrator has out", () => {
     expect(summary(one)).toEqual({ running: 2, asking: 0, working: false });
     expect(summaryLine(one)).toBe("2 running");
 
-    // Asking for permission is waiting on you, and so is a line left
-    // behind while nobody was looking.
+    // Asking for permission is waiting on you. A line left behind while
+    // nobody was looking is the orchestrator's to read, not yours.
     there.needs = "permission";
     expect(isAsking(there)).toBe(true);
     expect(summaryLine(one)).toBe("2 running, 1 asking");
     here.unread = true;
-    expect(summaryLine(one)).toBe("2 running, 2 asking");
-    expect(groupsFor(A)[0].asking).toBe(1);
+    expect(isAsking(here)).toBe(false);
+    expect(summaryLine(one)).toBe("2 running, 1 asking");
+    expect(groupsFor(A)[0].asking).toBe(0);
     expect(groupsFor(B)[0].asking).toBe(1);
 
     // A session that has stopped is neither running nor waiting, whatever
@@ -262,6 +268,37 @@ describe("what an orchestrator has out", () => {
     one.needs = null;
     one.unread = true;
     expect(conducting(one)).toBe(false);
+  });
+
+  it("leaves a started session read when it stops, and unread for a permission", () => {
+    const one = live(DIR, "pty-1", "sid-1");
+    const own = live(A, "pty-2", "sid-2");
+    const child = startedIn(A, one, "pty-3", "sid-3");
+    // Both end a turn behind the orchestrator's row. The user's own
+    // session waits on them; the started one waits on the orchestrator.
+    sessions.active = one.key;
+    exact("sid-2", "prompt");
+    exact("sid-2", "stop");
+    exact("sid-3", "prompt");
+    exact("sid-3", "stop");
+    expect(own.unread).toBe(true);
+    expect(child.unread).toBe(false);
+    expect(unreadCount()).toBe(1);
+    expect(summaryLine(one)).toBe("1 running");
+
+    // A line left, an idle notice or a bell is the orchestrator's to hear.
+    noted(child.key, "Which suite did you mean?");
+    exact("sid-3", "idle");
+    rang(child.key);
+    expect(child.unread).toBe(false);
+    expect(child.note).toBe("Which suite did you mean?");
+
+    // A permission is the one thing no agent can answer for it.
+    exact("sid-3", "prompt");
+    exact("sid-3", "permission");
+    expect(child.unread).toBe(true);
+    expect(summaryLine(one)).toBe("1 running, 1 asking");
+    expect(groupsFor(A)[0].asking).toBe(1);
   });
 
   it("counts only what the orchestrator itself started", () => {

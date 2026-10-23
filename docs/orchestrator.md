@@ -105,9 +105,10 @@ may have more than eight running at a time.
 The sessions an orchestrator started stay in the project they run in, where
 the work is, and keep out of the way: the pane folds them into one quiet
 line per orchestrator, "2 started by Retry rollout", which opens into a row
-each. The line speaks up in the accent when one of them is waiting on you,
-"1 asking", so the place to go is still the orchestrator and not the
-session it started.
+each. The line speaks up in the accent when one of them needs a
+permission, "1 asking", which only you can grant. Everything else they
+wait on, the orchestrator hears, so the place to go is still the
+orchestrator and not the session it started.
 
 The orchestrator's own row says what it has out, "3 running, 1 asking", and
 its changes pane, headed Orchestrator, shows the sessions it started instead

@@ -56,9 +56,11 @@ export function conductors(): Session[] {
   return sessions.all.filter((session) => session.project === orchestrator.dir);
 }
 
-/** A session that is waiting on the user: the state the folds speak up for. */
+/** A started session that is waiting on the user: it needs a permission,
+    which only the user can grant. Everything else it waits on is its
+    orchestrator's to hear, so the folds speak up for nothing else. */
 export function isAsking(session: Session): boolean {
-  return isLive(session) && (session.needs === "permission" || session.unread);
+  return isLive(session) && session.needs === "permission";
 }
 
 /** What one orchestrator has running, for the line under its name and its

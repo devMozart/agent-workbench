@@ -117,7 +117,10 @@ const PREFERRED_KEY = "workbench.agents";
 /** A past session, whose it is, and the account it ran under: the name
     of the account whose directory holds it, or null for the agents' own.
     It resumes under that account. */
-export type HistoryEntry = Transcript & { agent: AgentId; account: string | null };
+export type HistoryEntry = Transcript & {
+  agent: AgentId;
+  account: string | null;
+};
 
 export const sessions = $state({
   all: [] as Session[],
@@ -150,7 +153,11 @@ export const sessions = $state({
 
 /** The spans a past session may stay listed for, in the order they are
     offered, with the seconds each stands for. Forever has no limit. */
-export const PAST_SESSIONS: { choice: PastSessions; label: string; seconds: number | null }[] = [
+export const PAST_SESSIONS: {
+  choice: PastSessions;
+  label: string;
+  seconds: number | null;
+}[] = [
   { choice: "forever", label: "Forever", seconds: null },
   { choice: "month", label: "30 days", seconds: 30 * 24 * 60 * 60 },
   { choice: "week", label: "7 days", seconds: 7 * 24 * 60 * 60 },
@@ -183,7 +190,9 @@ export function setPastSessions(value: PastSessions) {
 /** Whether a transcript has gone unchanged for longer than past sessions
     stay listed. */
 export function aged(transcript: { modified: number }): boolean {
-  const limit = PAST_SESSIONS.find((span) => span.choice === sessions.pastSessions)?.seconds;
+  const limit = PAST_SESSIONS.find(
+    (span) => span.choice === sessions.pastSessions,
+  )?.seconds;
   if (limit === null || limit === undefined) return false;
   return Date.now() / 1000 - transcript.modified > limit;
 }
@@ -207,8 +216,13 @@ function pruneDormant(project: string | null = null) {
     for each agent, the agents' own included. An account that leaves an
     agent on its own directory is that directory, read once as the agents'
     own. */
-function historySources(): { agent: AgentId; account: string | null; dir?: string }[] {
-  const sources: { agent: AgentId; account: string | null; dir?: string }[] = [];
+function historySources(): {
+  agent: AgentId;
+  account: string | null;
+  dir?: string;
+}[] {
+  const sources: { agent: AgentId; account: string | null; dir?: string }[] =
+    [];
   for (const agent of AGENTS) {
     sources.push({ agent, account: null });
     for (const account of names()) {
@@ -226,7 +240,9 @@ export async function loadHistory(project: string) {
     historySources().map(({ agent, account, dir }) =>
       core()
         .transcripts(project, agent, dir)
-        .then((list) => list.map((transcript) => ({ ...transcript, agent, account })))
+        .then((list) =>
+          list.map((transcript) => ({ ...transcript, agent, account })),
+        )
         // No history is a shorter list, never an error.
         .catch(() => [] as HistoryEntry[]),
     ),
@@ -616,7 +632,16 @@ export function create(
 ): Session {
   prefer(project, agent);
   const live = added(
-    row(project, resumedFrom, agent, startIn, prompt, model, account, "starting"),
+    row(
+      project,
+      resumedFrom,
+      agent,
+      startIn,
+      prompt,
+      model,
+      account,
+      "starting",
+    ),
   );
   sessions.active = live.key;
   return live;
@@ -1075,11 +1100,24 @@ export function onWaiting(handler: ((session: Session) => void) | null) {
   waiting = handler;
 }
 
+let directed: (session: Session) => boolean = () => false;
+
+/** Who says whether another session answers for a session: one an
+    orchestrator started is that session's to hear, and waits on the user
+    only for a permission, which no agent can grant for it. */
+export function onDirected(handler: ((session: Session) => boolean) | null) {
+  directed = handler ?? (() => false);
+}
+
 /** Something happened that nobody saw: the session is unread until it is
     looked at. One already unread is still waiting, and is not news unless
-    what happened is: an ask for a permission is, whatever came before it. */
+    what happened is: an ask for a permission is, whatever came before it.
+    A session another session answers for is unread for a permission and
+    nothing else: a stop, an ending, a bell or a line left are its
+    director's to hear. */
 function unseen(session: Session, asking = false) {
   if (isViewed(session)) return;
+  if (!asking && directed(session)) return;
   const news = asking || !session.unread;
   session.unread = true;
   if (!news) return;
@@ -1135,9 +1173,10 @@ export function exact(
   kind: SessionEvent["kind"],
   note: string | null = null,
 ) {
-  const session = sessions.all.find((candidate) =>
-    candidate.id === sessionId &&
-    (candidate.status === "running" || candidate.status === "starting"),
+  const session = sessions.all.find(
+    (candidate) =>
+      candidate.id === sessionId &&
+      (candidate.status === "running" || candidate.status === "starting"),
   );
   if (session === undefined) {
     if (sessions.all.some((candidate) => candidate.id === sessionId)) return;

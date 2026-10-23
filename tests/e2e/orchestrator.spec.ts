@@ -193,23 +193,41 @@ test.describe("the orchestrator", () => {
     await event("prompt");
     await expect(dot).toHaveClass(/working/);
 
-    // The child stops and, unlooked at, is now waiting on the user: the dot
-    // rests again, and the accent count says why.
+    // The child stops: the dot rests again. It is the orchestrator that is
+    // waiting on the child, not the user, so nothing says asking.
     await event("stop");
     await expect(dot).not.toHaveClass(/working/);
     await expect(page.getByTestId("orchestrator-summary")).toHaveText(
-      "1 running, 1 asking",
+      "1 running",
     );
   });
 
-  test("speaks up on the fold when a started session is waiting", async ({
+  test("speaks up on the fold only when a started session needs a permission", async ({
     page,
   }) => {
     await orchestrate(page);
-    // The orchestrator is what is on screen, so the line its session leaves
-    // is one nobody has seen. Its row is the first: its project is pinned
+    // The orchestrator is what is on screen, so nobody is looking at the
+    // session it started. Its row is the first: its project is pinned
     // above the one the window opened with.
     await page.getByTestId("session-row").first().click();
+    const event = (kind: string) =>
+      page.evaluate(
+        (kind) =>
+          (
+            window as unknown as {
+              __sessionEvent?: (event: {
+                sessionId: string;
+                kind: string;
+              }) => void;
+            }
+          ).__sessionEvent?.({ sessionId: "session-3", kind }),
+        kind,
+      );
+    const fold = page.getByTestId("started-fold");
+    const summary = page.getByTestId("orchestrator-summary");
+
+    // A line the session leaves is the orchestrator's to read: the fold
+    // stays quiet.
     await page.evaluate(
       (project) =>
         (
@@ -221,21 +239,20 @@ test.describe("the orchestrator", () => {
         }),
       PROJECT,
     );
+    await expect(summary).toHaveText("1 running");
+    await expect(fold).not.toContainText("asking");
 
-    const fold = page.getByTestId("started-fold");
+    // A permission is the user's to grant, so the fold speaks up.
+    await event("prompt");
+    await event("permission");
     await expect(fold).toContainText("1 asking");
     await expect(fold.locator(".ring")).toBeVisible();
-    await expect(page.getByTestId("orchestrator-summary")).toHaveText(
-      "1 running, 1 asking",
-    );
+    await expect(summary).toHaveText("1 running, 1 asking");
 
-    // Looking at the session is answer enough: the fold goes quiet again.
-    await fold.click();
-    await page.getByTestId("started-session").click();
+    // Granted, the agent goes on, and the fold goes quiet again.
+    await event("prompt");
     await expect(fold).not.toContainText("asking");
-    await expect(page.getByTestId("orchestrator-summary")).toHaveText(
-      "1 running",
-    );
+    await expect(summary).toHaveText("1 running");
   });
 
   test("keeps a started session running when Delete lands on its row", async ({

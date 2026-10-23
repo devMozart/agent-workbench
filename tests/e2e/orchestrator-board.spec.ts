@@ -92,6 +92,19 @@ async function notify(page: Page, session: string, text: string) {
   );
 }
 
+/** A hook event from one of them, as the core reports it. */
+async function event(page: Page, session: string, kind: string) {
+  await page.evaluate(
+    ({ session, kind }) =>
+      (
+        window as unknown as {
+          __sessionEvent?: (event: { sessionId: string; kind: string }) => void;
+        }
+      ).__sessionEvent?.({ sessionId: session, kind }),
+    { session, kind },
+  );
+}
+
 /**
  * The orchestrator's own session, which is the first row in the pane,
  * under the project it runs in. Starting a session leaves the window here,
@@ -180,9 +193,16 @@ test.describe("the orchestrator's board", () => {
     await expect(rows(page).first()).toContainText("session 1");
     await expect(rows(page).first()).toContainText("demo · waiting, just now");
 
-    // One of them leaves a line while the orchestrator is on screen: it is
-    // waiting on the user, and the header says how many are.
+    // One of them leaves a line while the orchestrator is on screen: that
+    // is the orchestrator's to read, and the header counts nothing.
     await notify(page, first, "Which suite should I run?");
+    await expect(header(page)).toContainText("2 sessions");
+    await expect(header(page)).not.toContainText("asking");
+
+    // One asks for a permission: that is the user's, and the header says
+    // how many are.
+    await event(page, first, "prompt");
+    await event(page, first, "permission");
     await expect(header(page)).toContainText("2 sessions, 1 asking");
   });
 

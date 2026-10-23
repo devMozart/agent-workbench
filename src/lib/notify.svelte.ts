@@ -6,13 +6,12 @@
  * Both follow the moment a session's row goes unread, and only while the
  * window does not have focus: in a focused window the row, the status bar
  * and the agent pane already say it. A session an orchestrator started
- * answers to the orchestrator, so only its asking for a permission reaches
- * the user this way. Whether either is on is the user's to say, in the
- * settings, and not an agent's.
+ * goes unread only for a permission, so only that reaches the user this
+ * way. Whether either is on is the user's to say, in the settings, and
+ * not an agent's.
  */
 
 import { attention } from "$lib/attention.svelte";
-import { startedFor } from "$lib/conductor.svelte";
 import { core, type Settings } from "$lib/core";
 import { isConductor, LABEL } from "$lib/orchestrator.svelte";
 import { persist } from "$lib/persist";
@@ -33,7 +32,8 @@ export function notifySettings(): Pick<Settings, NotifyFields> {
 
 /** Takes the core's word for the machine. Nothing is sent back. */
 export function adoptNotify(settings: Partial<Pick<Settings, NotifyFields>>) {
-  if (typeof settings.notifications === "boolean") notify.notifications = settings.notifications;
+  if (typeof settings.notifications === "boolean")
+    notify.notifications = settings.notifications;
   if (typeof settings.chime === "boolean") notify.chime = settings.chime;
 }
 
@@ -66,7 +66,6 @@ export function bodyFor(session: Session): string {
 /** A session has just started waiting for the user. */
 export function announce(session: Session) {
   if (attention.focused) return;
-  if (startedFor(session.key) !== null && session.needs !== "permission") return;
   if (notify.notifications) {
     const title = titleFor(session);
     const body = bodyFor(session);

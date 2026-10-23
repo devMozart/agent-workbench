@@ -35,6 +35,7 @@ import {
   defaultAgent,
   isLive,
   label,
+  onDirected,
   sessions,
   statusMessage,
   type Session,
@@ -712,6 +713,10 @@ export function startedFor(key: string | null): string | null {
   if (key === null) return null;
   return conductor.startedBy[key] ?? ownerOf(byKey(key)?.id ?? null);
 }
+
+// A session a caller started answers to the caller: the rows do not call
+// for the user over it unless it needs a permission.
+onDirected((session) => startedFor(session.key) !== null);
 
 /** The rows a session started, running or not. */
 export function startedBy(sessionId: string): Session[] {
