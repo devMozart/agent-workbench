@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { cubicOut } from "svelte/easing";
   import Splitter from "$lib/components/Splitter.svelte";
   import SessionsPane from "$lib/panes/SessionsPane.svelte";
@@ -194,7 +194,14 @@
       .onFileDrag(handleDrag)
       .then((unlisten) => offs.push(unlisten));
     core()
-      .onOpenSettings(openSettings)
+      .onOpenSettings(async () => {
+        // The palette gives the keyboard back before the settings take it.
+        if (palette.open) {
+          closePalette();
+          await tick();
+        }
+        openSettings();
+      })
       .then((unlisten) => offs.push(unlisten));
     core()
       .onFullScreen((fullScreen) => (layout.fullScreen = fullScreen))
@@ -421,8 +428,12 @@
     const action = resolveAction(e, { focus: layout.focus, reviewing });
     if (!action) return;
     // The palette holds the keyboard while it is up: only its own chord,
-    // which puts it away, gets past it.
-    if (palette.open && action.type !== "palette") return;
+    // which puts it away, gets past it. The others are swallowed so the
+    // native menu does not act on them.
+    if (palette.open && action.type !== "palette") {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     perform(action);
   }

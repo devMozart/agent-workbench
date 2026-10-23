@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from "svelte";
+  import { onMount, tick } from "svelte";
   import { coversBrowser } from "$lib/browser.svelte";
   import { actionFor, type Action } from "$lib/keymap";
   import { focusPane, returnFocus } from "$lib/layout.svelte";
@@ -23,7 +23,7 @@
   let dialog: HTMLDivElement;
   let field = $state<HTMLInputElement | null>(null);
   let list = $state<HTMLDivElement | null>(null);
-  let cursor = $state(0);
+  let chosen = $state<string | null>(null);
 
   // The keyboard is taken on the way in and handed back on the way out,
   // whichever way the palette closed.
@@ -38,15 +38,34 @@
       waiting does not. */
   const live = (item: PaletteItem) => !(item.kind === "attention" && item.waiting === 0);
 
-  // A new query starts on the first item that does something.
-  $effect(() => {
-    palette.query;
-    cursor = Math.max(0, untrack(() => items).findIndex(live));
+  // The cursor follows the item chosen, wherever the list moves it, and
+  // sits on the first item that does something until one is chosen.
+  const cursor = $derived.by(() => {
+    const at = items.findIndex((item) => item.id === chosen);
+    return at >= 0 ? at : Math.max(0, items.findIndex(live));
   });
 
-  // The cursor stays within what the query leaves, and in view.
+  // A new query starts over on the first item that does something.
   $effect(() => {
-    if (cursor >= items.length) cursor = Math.max(0, items.length - 1);
+    palette.query;
+    chosen = null;
+  });
+
+  /** The cursor moves to the next item in a direction that does something. */
+  function step(direction: 1 | -1) {
+    for (let at = cursor + direction; at >= 0 && at < items.length; at += direction) {
+      if (live(items[at])) {
+        chosen = items[at].id;
+        return;
+      }
+    }
+  }
+
+  /** An id the list's options carry, safe in an attribute. */
+  const optionId = (item: PaletteItem) => `palette-opt-${item.id.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+
+  // The cursor stays in view.
+  $effect(() => {
     const at = cursor;
     tick().then(() => {
       list?.querySelectorAll<HTMLElement>("[role='option']")[at]?.scrollIntoView?.({ block: "nearest" });
@@ -70,6 +89,7 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    if (e.isComposing) return;
     switch (e.key) {
       case "Escape":
         e.preventDefault();
@@ -77,10 +97,10 @@
         closePalette();
         return;
       case "ArrowDown":
-        cursor = Math.min(cursor + 1, Math.max(0, items.length - 1));
+        step(1);
         break;
       case "ArrowUp":
-        cursor = Math.max(cursor - 1, 0);
+        step(-1);
         break;
       case "Enter":
         void run(items[cursor]);
@@ -120,23 +140,33 @@
       placeholder="Go to a session, or do something"
       autocomplete="off"
       spellcheck="false"
+      role="combobox"
+      aria-expanded="true"
+      aria-controls="palette-list"
+      aria-activedescendant={items[cursor] === undefined ? undefined : optionId(items[cursor])}
       aria-label="Sessions and actions"
       data-testid="palette-field"
     />
-    <div class="list" role="listbox" aria-label="Sessions and actions" bind:this={list}>
+    <div class="list" id="palette-list" role="listbox" aria-label="Sessions and actions" bind:this={list}>
       {#each items as item, index (item.id)}
         {#if item.kind === "action" && (index === 0 || items[index - 1].kind !== "action")}
-          <div class="group" role="presentation">Actions</div>
+          <div class="group" aria-hidden="true">Actions</div>
         {/if}
         <button
           class="row"
           class:cursor={index === cursor}
           class:off={!live(item)}
+          id={optionId(item)}
           role="option"
           aria-selected={index === cursor}
+          aria-disabled={!live(item)}
           tabindex="-1"
+          title={item.kind === "session" && item.detail !== "" ? `${item.label} · ${item.detail}` : item.label}
           onclick={() => run(item)}
-          onpointermove={() => (cursor = index)}
+          onpointerdown={(e) => e.preventDefault()}
+          onpointermove={(e) => {
+            if (e.movementX !== 0 || e.movementY !== 0) chosen = item.id;
+          }}
           data-testid="palette-row"
           data-kind={item.kind}
         >
@@ -156,10 +186,11 @@
           {/if}
           {#if item.kind !== "session"}<kbd>{item.chord}</kbd>{/if}
         </button>
-      {:else}
-        <p class="note">Nothing matches.</p>
       {/each}
     </div>
+    {#if items.length === 0}
+      <p class="note">Nothing matches.</p>
+    {/if}
   </div>
 </div>
 
