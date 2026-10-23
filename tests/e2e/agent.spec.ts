@@ -354,6 +354,23 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
 const buffer = (page: Page) => page.evaluate(() => window.__fake.buffer());
 const typed = (page: Page) =>
   page.evaluate(() => window.__fake.writes.join(""));
+/** What was typed to one pty, in order. */
+const writtenTo = (page: Page, ptyId: string) =>
+  page.evaluate(
+    (ptyId) =>
+      window.__fake.writesTo
+        .filter((w) => w.ptyId === ptyId)
+        .map((w) => w.data)
+        .join(""),
+    ptyId,
+  );
+/** The xterm instance a row draws with, read for the numbers a test checks. */
+const terminalOf = (page: Page, key: string) =>
+  page.evaluate((key) => {
+    const terminal = (window as unknown as { __WORKBENCH_TERMINALS__?: Record<string, any> })
+      .__WORKBENCH_TERMINALS__?.[key];
+    return { cols: terminal.cols, rows: terminal.rows, size: terminal.options.fontSize };
+  }, key);
 const spawns = (page: Page) => page.evaluate(() => window.__fake.spawns);
 const spawnCount = (page: Page) =>
   page.evaluate(() => window.__fake.spawns.length);
@@ -901,19 +918,18 @@ test.describe("working, and waiting for you", () => {
     expect((await page.evaluate(() => window.__fake.badges)).at(-1)).toBeNull();
   });
 
-  test("goes to the session that needs you on its chord, and says when none does", async ({
+  test("says so when no other session needs you, and stays where it is", async ({
     page,
   }) => {
     await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
     await expect(rows(page).first().locator(".dot")).toHaveClass(/unread/);
-
     await page.keyboard.press(`${MOD}+.`);
     await expect(page.locator(".session.on")).toContainText("session 1");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
 
     await page.keyboard.press(`${MOD}+.`);
     await expect(page.getByTestId("flash-readout")).toHaveText("Nothing needs you");
     await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
   });
 
   test("jumping to the session waiting leaves the keyboard in its terminal", async ({
@@ -1429,8 +1445,6 @@ test.describe("the command palette", () => {
   const entries = (page: Page) => page.getByTestId("palette-row");
   const chosen = (page: Page) => page.locator("[data-testid='palette-row'][aria-selected='true']");
   const sessionRows = (page: Page) => page.locator("[data-testid='palette-row'][data-kind='session']");
-  const writtenTo = (page: Page, ptyId: string) =>
-    page.evaluate((ptyId) => window.__fake.writesTo.filter((w) => w.ptyId === ptyId).map((w) => w.data).join(""), ptyId);
 
   test.beforeEach(async ({ page }) => {
     await open(page, { open: [ONE] });
@@ -1573,21 +1587,22 @@ test.describe("the command palette", () => {
 
   test("Down and Up move the selection and stop at the ends", async ({ page }) => {
     await chord(page);
+    await expect(field(page)).toBeFocused();
     const count = await entries(page).count();
     expect(count).toBeGreaterThan(4);
     const selected = () =>
       entries(page).evaluateAll((all) => all.findIndex((el) => el.getAttribute("aria-selected") === "true"));
-    const first = await selected();
-    expect(first).toBe(1);
+    await expect.poll(selected).toBe(1);
     await page.keyboard.press("ArrowUp");
-    expect(await selected()).toBe(1);
+    await expect.poll(selected).toBe(1);
     await page.keyboard.press("ArrowDown");
-    expect(await selected()).toBe(2);
+    await expect.poll(selected).toBe(2);
     await page.keyboard.press("ArrowUp");
-    expect(await selected()).toBe(1);
+    await expect.poll(selected).toBe(1);
     for (let i = 0; i < count + 3; i += 1) await page.keyboard.press("ArrowDown");
-    expect(await selected()).toBe(count - 1);
-    await expect(field(page)).toHaveAttribute("aria-activedescendant", `palette-opt-${count - 1}`);
+    await expect.poll(selected).toBe(count - 1);
+    const id = await field(page).getAttribute("aria-activedescendant");
+    await expect(page.locator(`#${id}`)).toHaveAttribute("aria-selected", "true");
   });
 
   test("the selected row stays inside the list's visible box", async ({ page }) => {
@@ -1595,8 +1610,9 @@ test.describe("the command palette", () => {
     for (let i = 0; i < 6; i += 1) await page.getByTestId("new-session").click();
     await expect(rows(page)).toHaveCount(8);
     await chord(page);
+    await expect(field(page)).toBeFocused();
     const list = page.locator("#palette-list");
-    expect((await list.evaluate((el) => el.scrollHeight - el.clientHeight))).toBeGreaterThan(0);
+    await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0);
     const count = await entries(page).count();
     for (let i = 0; i < count; i += 1) {
       await page.keyboard.press("ArrowDown");
@@ -1611,9 +1627,10 @@ test.describe("the command palette", () => {
 
   test("typing narrows the list, says when nothing is left, and Enter then does nothing", async ({ page }) => {
     await chord(page);
+    await expect(field(page)).toBeFocused();
     const all = await entries(page).count();
     await page.keyboard.type("session 1");
-    expect(await entries(page).count()).toBeLessThan(all);
+    await expect.poll(() => entries(page).count()).toBeLessThan(all);
     await page.keyboard.type("zzzz");
     await expect(entries(page)).toHaveCount(0);
     await expect(page.getByText("Nothing matches.")).toBeVisible();
@@ -1646,6 +1663,7 @@ test.describe("the command palette", () => {
     await expect(row).toContainText("nothing waiting");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId(PALETTE)).toBeVisible();
+    // Forced: Playwright treats aria-disabled as disabled and would wait forever.
     await row.click({ force: true });
     await expect(page.getByTestId(PALETTE)).toBeVisible();
     await expect(page.locator(".session.on")).toContainText("session 2");
@@ -1696,12 +1714,7 @@ test.describe("the command palette", () => {
 });
 
 test.describe("zoom", () => {
-  const grid = (page: Page, key: string) =>
-    page.evaluate((key) => {
-      const terminal = (window as unknown as { __WORKBENCH_TERMINALS__?: Record<string, any> })
-        .__WORKBENCH_TERMINALS__?.[key];
-      return { cols: terminal.cols, rows: terminal.rows, size: terminal.options.fontSize };
-    }, key);
+  const grid = terminalOf;
   const visibleKey = (page: Page) =>
     page.evaluate(
       () =>
@@ -1742,9 +1755,12 @@ test.describe("zoom", () => {
     await page.keyboard.press(`${MOD}+=`);
     await page.keyboard.press(`${MOD}+=`);
     await expect.poll(async () => (await grid(page, key)).size).toBe(14);
+    // Still starting: the pty had not been spawned when the zoom happened.
+    expect(await spawnCount(page)).toBe(0);
     await expect(page.locator(AGENT)).toContainText("running");
     const final = await grid(page, key);
     await expect.poll(() => page.evaluate(() => window.__fake.resizes.length)).toBe(1);
+    // Long enough for a second resize to show up; the test asserts none did.
     await page.waitForTimeout(300);
     const resizes = await page.evaluate(() => window.__fake.resizes);
     expect(resizes).toEqual([{ cols: final.cols, rows: final.rows }]);
