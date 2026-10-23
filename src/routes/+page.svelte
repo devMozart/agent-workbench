@@ -40,6 +40,7 @@
   import { stash } from "$lib/exits";
   import { isMac, resolveAction } from "$lib/keymap";
   import { keys } from "$lib/keys.svelte";
+  import { flash } from "$lib/flash.svelte";
   import { openSettings, settings } from "$lib/settings.svelte";
   import { cycleTheme, theme } from "$lib/theme.svelte";
   import {
@@ -610,6 +611,9 @@
       >account: {accountLabel(activeSession()?.account ?? null)}</span
     >
   {/if}
+  {#if flash.text !== null}
+    <span class="flash" data-testid="flash-readout">{flash.text}</span>
+  {/if}
   {#if unreadCount() > 0}
     <span class="waiting" data-testid="waiting-readout">
       {unreadCount()} waiting for you
@@ -783,6 +787,9 @@
 
 
   .waiting {
+    color: var(--accent);
+  }
+  .flash {
     color: var(--accent);
   }
 
