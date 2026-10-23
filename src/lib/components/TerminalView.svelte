@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -290,9 +290,15 @@
 
   async function spawn() {
     if (!terminal) return;
-    const up = await start(terminal.cols, terminal.rows, (bytes) => queue?.push(bytes));
+    const spawned = { cols: terminal.cols, rows: terminal.rows };
+    const up = await start(spawned.cols, spawned.rows, (bytes) => queue?.push(bytes));
     if (!up || !terminal) return;
-    sent = { cols: terminal.cols, rows: terminal.rows };
+    // The process has the grid it was spawned with. The grid may have changed
+    // while it started, so it is measured once the pty id has reached this
+    // component, and a difference is sent.
+    sent = spawned;
+    await tick();
+    measure();
     if (focused && active && shown) terminal.focus();
   }
 
