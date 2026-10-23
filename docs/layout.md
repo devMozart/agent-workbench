@@ -189,6 +189,20 @@ The process is told the same size as the grid xterm draws. A shell wraps a
 long line where it believes the right edge is and redraws on that belief, so
 any other width garbles what it shows.
 
+## Zoom
+
+<kbd>Cmd</kbd><kbd>=</kbd> and <kbd>Cmd</kbd><kbd>-</kbd> draw the terminal
+the keyboard is in a pixel larger or smaller, between 8 and 24, and
+<kbd>Cmd</kbd><kbd>0</kbd> puts it back at 12: the panel's shell when the
+panel has the keyboard, the agent on screen otherwise. A layout that puts
+= under Shift, or gives + a key of its own, zooms in on those as well.
+
+Each terminal has its own size. A larger cell is a smaller grid, so the
+terminal is measured once and the process told its new size, as for a
+change of font, and the status bar names the size. An agent session's size
+stays with the session, so resuming it, or a restart, brings it back at
+that size. A shell's lasts as long as the shell.
+
 ## The field above the tree
 
 The changes pane's toolbar is a search field. What is typed narrows the tree
