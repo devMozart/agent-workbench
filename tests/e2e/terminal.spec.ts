@@ -203,3 +203,17 @@ test("remembers being open across a reload", async ({ page }) => {
   await page.reload();
   await expect(page.locator(TERMINAL)).toBeVisible();
 });
+
+test("zooms the shell that has the keyboard", async ({ page }) => {
+  await page.keyboard.press(`${MOD}+j`);
+  await expect(page.locator(ROW)).toHaveCount(1);
+  const size = () =>
+    page.evaluate(
+      () =>
+        (window as unknown as { __WORKBENCH_TERMINALS__?: Record<string, any> })
+          .__WORKBENCH_TERMINALS__?.["t1"]?.options.fontSize ?? null,
+    );
+  await page.keyboard.press(`${MOD}+=`);
+  await expect.poll(size).toBe(13);
+  await expect(page.getByTestId("flash-readout")).toHaveText("13 px");
+});

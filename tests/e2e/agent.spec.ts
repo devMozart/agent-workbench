@@ -30,6 +30,8 @@ interface FakeOptions {
     size: number;
   }[];
   failSpawn?: string | null;
+  /** How long a spawn takes to answer, in milliseconds. */
+  spawnDelay?: number;
 }
 
 declare global {
@@ -57,6 +59,7 @@ declare global {
       outputs: Record<string, (bytes: Uint8Array) => void>;
       enders: ((ended: unknown) => void)[];
       failSpawn: string | null;
+      spawnDelay: number;
       binary: string | null;
       /** Where codex was found, or null for not installed. */
       codex: string | null;
@@ -93,7 +96,7 @@ declare global {
 
 async function installFakeCore(page: Page, options: FakeOptions = {}) {
   await page.addInitScript(
-    ({ open, binary, failSpawn, codex, codexTranscripts }) => {
+    ({ open, binary, failSpawn, codex, codexTranscripts, spawnDelay }) => {
       const read = (term: any) => {
         if (!term) return "";
         const active = term.buffer.active;
@@ -122,6 +125,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
         outputs: {},
         enders: [],
         failSpawn: failSpawn ?? null,
+        spawnDelay: spawnDelay ?? 0,
         binary: binary === undefined ? "/usr/local/bin/claude" : binary,
         codex: codex ?? null,
         codexTranscripts: codexTranscripts ?? [],
@@ -198,6 +202,8 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
           onOutput: (bytes: Uint8Array) => void,
         ) => {
           if (fake.failSpawn) throw new Error(fake.failSpawn);
+          if (fake.spawnDelay > 0)
+            await new Promise((resolve) => setTimeout(resolve, fake.spawnDelay));
           const id = `pty-${++ptyCount}`;
           fake.spawns.push(spawnOptions);
           fake.outputs[id] = onOutput;
@@ -340,6 +346,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
       failSpawn: options.failSpawn,
       codex: options.codex,
       codexTranscripts: options.codexTranscripts,
+      spawnDelay: options.spawnDelay,
     },
   );
 }
@@ -894,6 +901,21 @@ test.describe("working, and waiting for you", () => {
     expect((await page.evaluate(() => window.__fake.badges)).at(-1)).toBeNull();
   });
 
+  test("goes to the session that needs you on its chord, and says when none does", async ({
+    page,
+  }) => {
+    await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
+    await expect(rows(page).first().locator(".dot")).toHaveClass(/unread/);
+
+    await page.keyboard.press(`${MOD}+.`);
+    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+
+    await page.keyboard.press(`${MOD}+.`);
+    await expect(page.getByTestId("flash-readout")).toHaveText("Nothing needs you");
+    await expect(page.locator(".session.on")).toContainText("session 1");
+  });
+
   test("jumping to the session waiting leaves the keyboard in its terminal", async ({
     page,
   }) => {
@@ -1397,5 +1419,302 @@ test.describe("when things are missing", () => {
 
     await page.waitForTimeout(400);
     expect(await spawnCount(page)).toBe(0);
+  });
+});
+
+test.describe("the command palette", () => {
+  const PALETTE = "palette";
+  const chord = (page: Page) => page.keyboard.press(`${MOD}+Shift+P`);
+  const field = (page: Page) => page.getByTestId("palette-field");
+  const entries = (page: Page) => page.getByTestId("palette-row");
+  const chosen = (page: Page) => page.locator("[data-testid='palette-row'][aria-selected='true']");
+  const sessionRows = (page: Page) => page.locator("[data-testid='palette-row'][data-kind='session']");
+  const writtenTo = (page: Page, ptyId: string) =>
+    page.evaluate((ptyId) => window.__fake.writesTo.filter((w) => w.ptyId === ptyId).map((w) => w.data).join(""), ptyId);
+
+  test.beforeEach(async ({ page }) => {
+    await open(page, { open: [ONE] });
+    await running(page);
+    await page.getByTestId("new-session").click();
+    await expect(rows(page)).toHaveCount(2);
+  });
+
+  test("opens on its chord in the middle of the window, with the keyboard in it, and closes on the same chord", async ({
+    page,
+  }) => {
+    await chord(page);
+    await expect(field(page)).toBeFocused();
+    const box = (await page.getByTestId(PALETTE).boundingBox())!;
+    expect(Math.abs(box.x + box.width / 2 - page.viewportSize()!.width / 2)).toBeLessThan(2);
+
+    await chord(page);
+    await expect(page.getByTestId(PALETTE)).toHaveCount(0);
+    await expect(page.locator(KEYBOARD).last()).toBeFocused();
+    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  });
+
+  test("Escape closes it and the keyboard goes back to the agent", async ({ page }) => {
+    await chord(page);
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId(PALETTE)).toHaveCount(0);
+    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await page.keyboard.type("x");
+    await expect.poll(() => writtenTo(page, "pty-2")).toBe("x");
+  });
+
+  test("Escape opened over the viewer closes only the palette", async ({ page }) => {
+    await page.keyboard.press(`${MOD}+d`);
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+    await chord(page);
+    await expect(field(page)).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId(PALETTE)).toHaveCount(0);
+    await expect(page.getByTestId("mode-readout")).toHaveText("reviewing");
+  });
+
+  test("a click on the scrim closes it and a click inside does not", async ({ page }) => {
+    await chord(page);
+    await page.getByTestId(PALETTE).click({ position: { x: 4, y: 4 } });
+    await field(page).click();
+    await expect(page.getByTestId(PALETTE)).toBeVisible();
+
+    await page.getByTestId("palette-scrim").click({ position: { x: 8, y: 8 } });
+    await expect(page.getByTestId(PALETTE)).toHaveCount(0);
+  });
+
+  test("goes to the session typed, with the keyboard in its terminal", async ({ page }) => {
+    await expect(page.locator(".session.on")).toContainText("session 2");
+    await chord(page);
+    await page.keyboard.type("session 1");
+    await expect(entries(page).first()).toContainText("session 1");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId(PALETTE)).toHaveCount(0);
+    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await page.keyboard.type("x");
+    await expect.poll(() => writtenTo(page, "pty-1")).toBe("x");
+    expect(await writtenTo(page, "pty-2")).toBe("");
+  });
+
+  test("with nothing waiting, an empty query and Enter pick the first session", async ({ page }) => {
+    await chord(page);
+    await expect(entries(page).first()).toHaveAttribute("data-kind", "attention");
+    await expect(chosen(page)).toHaveAttribute("data-kind", "session");
+    const first = sessionRows(page).first();
+    const name = (await first.locator(".label").innerText()).trim();
+    const pty = `pty-${name.replace("session ", "")}`;
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId(PALETTE)).toHaveCount(0);
+    await expect(page.locator(".session.on")).toContainText(name);
+    await page.keyboard.type("y");
+    await expect.poll(() => writtenTo(page, pty)).toBe("y");
+  });
+
+  test("the terminal action ends in a shell", async ({ page }) => {
+    await chord(page);
+    await page.keyboard.type("show hide terminal");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("section[data-pane='terminal']")).toBeVisible();
+    await expect(page.getByTestId("focus-readout")).toHaveText("focus: terminal");
+  });
+
+  test("the sessions action ends on the sessions nav", async ({ page }) => {
+    await chord(page);
+    await page.keyboard.type("focus sessions");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("sessions-nav")).toBeFocused();
+    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+  });
+
+  test("the settings action ends in the dialog, and Escape there returns to the pane", async ({ page }) => {
+    await chord(page);
+    await page.keyboard.type("open settings");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("settings")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("settings")).toHaveCount(0);
+    await expect(page.locator(KEYBOARD).last()).toBeFocused();
+    await page.keyboard.type("k");
+    await expect.poll(() => writtenTo(page, "pty-2")).toBe("k");
+  });
+
+  test("swallows other chords while it is open", async ({ page }) => {
+    await chord(page);
+    await page.keyboard.press(`${MOD}+j`);
+    await expect(page.locator("section[data-pane='terminal']")).toBeHidden();
+    await page.keyboard.press(`${MOD}+,`);
+    await expect(page.getByTestId("settings")).toHaveCount(0);
+    await expect(page.getByTestId(PALETTE)).toBeVisible();
+    await expect(field(page)).toBeFocused();
+  });
+
+  test("Down and Up move the selection and stop at the ends", async ({ page }) => {
+    await chord(page);
+    const count = await entries(page).count();
+    expect(count).toBeGreaterThan(4);
+    const selected = () =>
+      entries(page).evaluateAll((all) => all.findIndex((el) => el.getAttribute("aria-selected") === "true"));
+    const first = await selected();
+    expect(first).toBe(1);
+    await page.keyboard.press("ArrowUp");
+    expect(await selected()).toBe(1);
+    await page.keyboard.press("ArrowDown");
+    expect(await selected()).toBe(2);
+    await page.keyboard.press("ArrowUp");
+    expect(await selected()).toBe(1);
+    for (let i = 0; i < count + 3; i += 1) await page.keyboard.press("ArrowDown");
+    expect(await selected()).toBe(count - 1);
+    await expect(field(page)).toHaveAttribute("aria-activedescendant", `palette-opt-${count - 1}`);
+  });
+
+  test("the selected row stays inside the list's visible box", async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 420 });
+    for (let i = 0; i < 6; i += 1) await page.getByTestId("new-session").click();
+    await expect(rows(page)).toHaveCount(8);
+    await chord(page);
+    const list = page.locator("#palette-list");
+    expect((await list.evaluate((el) => el.scrollHeight - el.clientHeight))).toBeGreaterThan(0);
+    const count = await entries(page).count();
+    for (let i = 0; i < count; i += 1) {
+      await page.keyboard.press("ArrowDown");
+      const visible = await page.evaluate(() => {
+        const row = document.querySelector("[data-testid='palette-row'][aria-selected='true']")!.getBoundingClientRect();
+        const box = document.getElementById("palette-list")!.getBoundingClientRect();
+        return row.top >= box.top - 1 && row.bottom <= box.bottom + 1;
+      });
+      expect(visible).toBe(true);
+    }
+  });
+
+  test("typing narrows the list, says when nothing is left, and Enter then does nothing", async ({ page }) => {
+    await chord(page);
+    const all = await entries(page).count();
+    await page.keyboard.type("session 1");
+    expect(await entries(page).count()).toBeLessThan(all);
+    await page.keyboard.type("zzzz");
+    await expect(entries(page)).toHaveCount(0);
+    await expect(page.getByText("Nothing matches.")).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId(PALETTE)).toBeVisible();
+    await expect(page.locator(".session.on")).toContainText("session 2");
+  });
+
+  test("the Actions heading stands once above the first action, and not among sessions alone", async ({ page }) => {
+    await chord(page);
+    const heading = page.locator("#palette-list .group");
+    await expect(heading).toHaveCount(1);
+    await expect(heading).toHaveText("Actions");
+    const above = (await heading.boundingBox())!;
+    const lastSession = (await sessionRows(page).last().boundingBox())!;
+    const firstAction = (await page.locator("[data-kind='action']").first().boundingBox())!;
+    expect(above.y).toBeGreaterThanOrEqual(lastSession.y + lastSession.height - 1);
+    expect(above.y + above.height).toBeLessThanOrEqual(firstAction.y + 1);
+
+    await page.keyboard.type("session 1");
+    await expect(page.locator("[data-kind='action']")).toHaveCount(0);
+    await expect(heading).toHaveCount(0);
+  });
+
+  test("the nothing-waiting row does nothing on Enter or a click", async ({ page }) => {
+    await chord(page);
+    await page.keyboard.type("next session that needs");
+    const row = entries(page).first();
+    await expect(row).toHaveAttribute("data-kind", "attention");
+    await expect(row).toContainText("nothing waiting");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId(PALETTE)).toBeVisible();
+    await row.click({ force: true });
+    await expect(page.getByTestId(PALETTE)).toBeVisible();
+    await expect(page.locator(".session.on")).toContainText("session 2");
+  });
+
+  test("hovering the nothing-waiting row does not select it", async ({ page }) => {
+    await chord(page);
+    const row = entries(page).first();
+    await expect(row).toHaveAttribute("data-kind", "attention");
+    const box = (await row.boundingBox())!;
+    await page.mouse.move(box.x + 20, box.y + box.height / 2);
+    await page.mouse.move(box.x + 40, box.y + box.height / 2, { steps: 4 });
+    await expect(row).toHaveAttribute("aria-selected", "false");
+    await expect(chosen(page)).toHaveAttribute("data-kind", "session");
+  });
+
+  test("a session changing status while it is open does not move the selection", async ({ page }) => {
+    await page.getByTestId("new-session").click();
+    await expect(rows(page)).toHaveCount(3);
+    await expect(page.locator(".session.on")).toContainText("session 3");
+    await chord(page);
+    const target = sessionRows(page).filter({ hasText: "session 2" });
+    const index = await entries(page).evaluateAll((all) =>
+      all.findIndex((el) => el.textContent?.includes("session 2")),
+    );
+    for (let i = 0; i < 6 && (await target.getAttribute("aria-selected")) !== "true"; i += 1)
+      await page.keyboard.press("ArrowDown");
+    expect(index).toBeGreaterThan(0);
+    await expect(target).toHaveAttribute("aria-selected", "true");
+
+    await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
+    await expect(page.locator("[data-testid='palette-row'][data-kind='attention']")).toContainText("1 waiting");
+    await expect(target).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".session.on")).toContainText("session 2");
+  });
+});
+
+test.describe("zoom", () => {
+  const grid = (page: Page, key: string) =>
+    page.evaluate((key) => {
+      const terminal = (window as unknown as { __WORKBENCH_TERMINALS__?: Record<string, any> })
+        .__WORKBENCH_TERMINALS__?.[key];
+      return { cols: terminal.cols, rows: terminal.rows, size: terminal.options.fontSize };
+    }, key);
+  const visibleKey = (page: Page) =>
+    page.evaluate(
+      () =>
+        (document.querySelector("[data-testid='terminal']:not(.hidden)") as HTMLElement).dataset.session!,
+    );
+
+  test("draws the agent larger, tells the pty, and keeps the size with the session", async ({ page }) => {
+    await open(page, { open: [ONE] });
+    await running(page);
+    const first = await visibleKey(page);
+    const before = await grid(page, first);
+    await page.keyboard.press(`${MOD}+=`);
+    await page.keyboard.press(`${MOD}+=`);
+    await expect.poll(async () => (await grid(page, first)).size).toBe(14);
+    await expect(page.getByTestId("flash-readout")).toHaveText("14 px");
+    const after = await grid(page, first);
+    expect(after.cols).toBeLessThan(before.cols);
+    await expect
+      .poll(() => page.evaluate(() => window.__fake.resizes.at(-1)))
+      .toMatchObject({ cols: after.cols, rows: after.rows });
+
+    await page.getByTestId("new-session").click();
+    await expect(rows(page)).toHaveCount(2);
+    const second = await visibleKey(page);
+    expect(second).not.toBe(first);
+    await expect.poll(async () => (await grid(page, second)).size).toBe(12);
+    await rows(page).first().click();
+    await expect.poll(async () => (await grid(page, first)).size).toBe(14);
+
+    await page.keyboard.press(`${MOD}+0`);
+    await expect.poll(async () => (await grid(page, first)).size).toBe(12);
+  });
+
+  test("a zoom while the session is starting reaches the pty once, with the final grid", async ({ page }) => {
+    await open(page, { open: [ONE], spawnDelay: 600 });
+    await page.getByTestId("new-session").click();
+    const key = await visibleKey(page);
+    await page.keyboard.press(`${MOD}+=`);
+    await page.keyboard.press(`${MOD}+=`);
+    await expect.poll(async () => (await grid(page, key)).size).toBe(14);
+    await expect(page.locator(AGENT)).toContainText("running");
+    const final = await grid(page, key);
+    await expect.poll(() => page.evaluate(() => window.__fake.resizes.length)).toBe(1);
+    await page.waitForTimeout(300);
+    const resizes = await page.evaluate(() => window.__fake.resizes);
+    expect(resizes).toEqual([{ cols: final.cols, rows: final.rows }]);
+    const spawned = (await spawns(page))[0];
+    expect(spawned.cols).not.toBe(final.cols);
   });
 });
