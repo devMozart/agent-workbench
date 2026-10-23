@@ -11,6 +11,8 @@
   import { remote } from "$lib/remote.svelte";
   import Resume from "$lib/components/Resume.svelte";
   import { resume } from "$lib/resume.svelte";
+  import Palette from "$lib/components/Palette.svelte";
+  import { closePalette, openPalette, palette } from "$lib/palette.svelte";
   import ConductAsk from "$lib/components/ConductAsk.svelte";
   import SettingsAsk from "$lib/components/SettingsAsk.svelte";
   import UserStyles from "$lib/components/UserStyles.svelte";
@@ -418,6 +420,9 @@
   function onKeydown(e: KeyboardEvent) {
     const action = resolveAction(e, { focus: layout.focus, reviewing });
     if (!action) return;
+    // The palette holds the keyboard while it is up: only its own chord,
+    // which puts it away, gets past it.
+    if (palette.open && action.type !== "palette") return;
     e.preventDefault();
     perform(action);
   }
@@ -492,6 +497,12 @@
       case "zoom":
         zoomTerminal(action.step);
         break;
+      case "palette":
+        if (palette.open) closePalette();
+        else openPalette();
+        break;
+      default:
+        action satisfies never;
     }
   }
 
@@ -628,6 +639,9 @@
 {/if}
 {#if resume.open}
   <Resume />
+{/if}
+{#if palette.open}
+  <Palette {perform} />
 {/if}
 {#if pluginSections.pending !== null}
   <ActionInput />
