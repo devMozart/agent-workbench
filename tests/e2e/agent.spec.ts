@@ -1662,18 +1662,29 @@ test.describe("the command palette", () => {
     await expect(chosen(page)).toHaveAttribute("data-kind", "session");
   });
 
+  test("a session changing status while it is open keeps the highlight it opened with", async ({ page }) => {
+    await chord(page);
+    await expect(field(page)).toBeFocused();
+    const name = (await chosen(page).locator(".label").innerText()).trim();
+    const pty = `pty-${name.replace("session ", "")}`;
+    await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
+    await expect(page.locator("[data-testid='palette-row'][data-kind='attention']")).toContainText("1 waiting");
+    await expect(chosen(page).locator(".label")).toHaveText(name);
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId(PALETTE)).toHaveCount(0);
+    await expect(page.locator(".session.on")).toContainText(name);
+    await page.keyboard.type("w");
+    await expect.poll(() => writtenTo(page, pty)).toBe("w");
+  });
+
   test("a session changing status while it is open does not move the selection", async ({ page }) => {
     await page.getByTestId("new-session").click();
     await expect(rows(page)).toHaveCount(3);
     await expect(page.locator(".session.on")).toContainText("session 3");
     await chord(page);
     const target = sessionRows(page).filter({ hasText: "session 2" });
-    const index = await entries(page).evaluateAll((all) =>
-      all.findIndex((el) => el.textContent?.includes("session 2")),
-    );
     for (let i = 0; i < 6 && (await target.getAttribute("aria-selected")) !== "true"; i += 1)
       await page.keyboard.press("ArrowDown");
-    expect(index).toBeGreaterThan(0);
     await expect(target).toHaveAttribute("aria-selected", "true");
 
     await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));

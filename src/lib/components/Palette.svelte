@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { coversBrowser } from "$lib/browser.svelte";
   import { actionFor, type Action } from "$lib/keymap";
   import { focusPane, returnFocus } from "$lib/layout.svelte";
@@ -38,17 +38,18 @@
       waiting does not. */
   const live = (item: PaletteItem) => !(item.kind === "attention" && item.waiting === 0);
 
-  // The cursor follows the item chosen, wherever the list moves it, and
-  // sits on the first item that does something until one is chosen.
+  // The cursor follows the item chosen, wherever the list moves it. When the
+  // item chosen is gone it sits on the first item that does something.
   const cursor = $derived.by(() => {
     const at = items.findIndex((item) => item.id === chosen);
     return at >= 0 ? at : Math.max(0, items.findIndex(live));
   });
 
-  // A new query starts over on the first item that does something.
+  // A new query, and the opening one, choose the first item that does
+  // something, so the list changing under it does not move the cursor.
   $effect(() => {
     palette.query;
-    chosen = null;
+    chosen = untrack(() => items.find(live)?.id ?? null);
   });
 
   /** The cursor moves to the next item in a direction that does something. */
