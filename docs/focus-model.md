@@ -71,8 +71,12 @@ none it cannot be picked.
 <kbd>Up</kbd> and <kbd>Down</kbd> move the cursor and <kbd>Enter</kbd>
 picks. <kbd>Escape</kbd> or the chord again puts the palette away, and the
 keyboard goes back where it was. While it is up, the palette has the
-keyboard and no other chord reaches past it. The cursor stays on
-the same entry while sessions change state under it.
+keyboard and no chord reaches past it, except that Settings opened from the
+app's menu puts the palette away first. The cursor stays on the same entry
+while sessions change state under it.
+
+While a dialog such as the settings is up, the palette's chord and
+<kbd>Cmd</kbd><kbd>.</kbd> do nothing, so the keyboard stays in the dialog.
 
 ## What the app never claims
 

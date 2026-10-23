@@ -67,15 +67,15 @@ On the keyboard the switch sits on the cursor path after the menu button,
 and Left and Right flip it. Up and Down walk the rows in the order drawn,
 groups first and the projects after.
 
-<kbd>Cmd</kbd><kbd>.</kbd> goes to the next session that needs you from
-anywhere and puts the keyboard in it. The sessions that need you are taken
+<kbd>Cmd</kbd><kbd>.</kbd> goes to the next session that needs you and
+puts the keyboard in it. The sessions that need you are taken
 in order: those asking for a permission first, and within each kind the one
 that has waited longest first. The chord goes to the one after the session
 on screen, or to the first when the session on screen is not among them,
 and round to the first again after the last. A session an orchestrator
 started counts only while it asks for a permission, since the orchestrator
 answers for the rest. When no other session needs you, the status bar says
-so.
+so. While a dialog is up the chord does nothing.
 
 ## After a restart
 

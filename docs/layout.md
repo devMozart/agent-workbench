@@ -200,9 +200,11 @@ own, <kbd>Cmd</kbd> with either zooms in as well.
 
 Each terminal has its own size. A larger size fits fewer rows and columns,
 so the terminal measures its grid again and tells the process, as a change
-of [font](settings.md#font) does. The status bar names the new size. An agent session's size
-stays with the session, so resuming it, or a restart, brings it back at
-that size. A shell's lasts as long as the shell.
+of [font](settings.md#font) does. The status bar names the new size.
+An agent session's size stays with the session, so resuming it, or a
+restart, brings it back at that size. A shell's lasts as long as the
+shell. This window keeps the sizes, not the settings file, so they do not
+follow to another machine the way chords do.
 
 ## The field above the tree
 
