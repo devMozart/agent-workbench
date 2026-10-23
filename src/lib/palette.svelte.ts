@@ -1,6 +1,8 @@
 import { conducted, startedFor } from "$lib/conductor.svelte";
 import { ACTIONS, chordFor, describe, type ActionKey } from "$lib/keys.svelte";
-import { LABEL, conductorLabel, conducting, orchestrator } from "$lib/orchestrator.svelte";
+import { matches } from "$lib/files.svelte";
+import { hostOf } from "$lib/remote.svelte";
+import { LABEL, conductorLabel, conducting, orchestrator, summaryLine } from "$lib/orchestrator.svelte";
 import { byStatus, label, sessions, waitingOnYou, type Session } from "$lib/sessions.svelte";
 import { projectLabel } from "$lib/workspace.svelte";
 
@@ -14,11 +16,13 @@ import { projectLabel } from "$lib/workspace.svelte";
  */
 
 export type PaletteItem =
-  | { kind: "attention"; id: "attention"; label: string; waiting: number; chord: string }
+  | { kind: "attention"; id: "attention"; label: string; detail: string; waiting: number; chord: string }
   | { kind: "session"; id: string; label: string; detail: string; session: Session }
   | { kind: "action"; id: string; label: string; detail: string; action: ActionKey; chord: string };
 
-export const ATTENTION_LABEL = "Next session that needs you";
+const JUMP = ACTIONS.find(({ key }) => key === "session.attention")!;
+
+export const ATTENTION_LABEL = JUMP.label;
 
 export const palette = $state({ open: false, query: "" });
 
@@ -31,22 +35,18 @@ export function closePalette() {
   palette.open = false;
 }
 
-/** Whether every word of the query is somewhere in the text, in any order
-    and any case, as the tree's filter reads it. */
-export function matches(text: string, query: string): boolean {
-  const haystack = text.toLowerCase();
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((word) => word !== "")
-    .every((word) => haystack.includes(word));
-}
-
-/** Where a session belongs, and who started it, and what it left. */
+/** Where a session belongs, the machine and account it runs on, who started
+    it, and what it left. */
 function detailOf(session: Session): string {
   const where = session.project === orchestrator.dir ? LABEL : projectLabel(session.project);
   const by = startedFor(session.key);
-  return [where, by === null ? null : conductorLabel(by), session.note]
+  return [
+    where,
+    hostOf(session.project),
+    session.account,
+    by === null ? null : conductorLabel(by),
+    summaryLine(session) ?? session.note,
+  ]
     .filter((part): part is string => part !== null)
     .join(" · ");
 }
@@ -57,6 +57,7 @@ export function paletteItems(query: string): PaletteItem[] {
     kind: "attention",
     id: "attention",
     label: ATTENTION_LABEL,
+    detail: JUMP.group,
     // The jump goes to sessions other than the one on screen, so those are
     // what it counts.
     waiting: waitingOnYou(conducted).filter((session) => session.key !== sessions.active).length,

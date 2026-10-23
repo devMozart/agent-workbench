@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { attention } from "$lib/attention.svelte";
+import { conductor, resetConductor } from "$lib/conductor.svelte";
 import { chordFor, describe as spell, resetKeys } from "$lib/keys.svelte";
 import {
   ATTENTION_LABEL,
   closePalette,
-  matches,
   openPalette,
   palette,
   paletteItems,
 } from "$lib/palette.svelte";
-import { create, exact, reset, select, started } from "$lib/sessions.svelte";
+import { matches } from "$lib/files.svelte";
+import { orchestrator } from "$lib/orchestrator.svelte";
+import { create, exact, label, noted, reset, select, started } from "$lib/sessions.svelte";
 
 vi.mock("$lib/core", () => ({
   core: () => ({
@@ -23,6 +25,8 @@ const B = "/home/ada/dev/two";
 
 beforeEach(() => {
   reset();
+  resetConductor();
+  orchestrator.dir = null;
   resetKeys();
   closePalette();
   attention.focused = true;
@@ -65,14 +69,66 @@ describe("what the palette lists", () => {
   it("finds a session by its project and an action by its words", () => {
     create(A);
     create(B);
-    expect(
-      paletteItems("two").map((item) => (item.kind === "session" ? item.detail : item.label)),
-    ).toEqual(["two"]);
+    const sessionDetails = (query: string) =>
+      paletteItems(query).flatMap((item) => (item.kind === "session" ? [item.detail] : []));
+    expect(sessionDetails("two")).toEqual(["two"]);
     expect(paletteItems("terminal zoom").map((item) => item.label)).toEqual([
       "Zoom the terminal in",
       "Zoom the terminal out",
       "Reset the terminal's zoom",
     ]);
+  });
+
+  it("tells two remote projects apart by their host", () => {
+    create("ssh://a/home/x/proj");
+    create("ssh://b/home/x/proj");
+    const found = paletteItems("b").filter((item) => item.kind === "session");
+    expect(found).toHaveLength(1);
+    expect(found[0].kind === "session" && found[0].detail).toContain("b");
+    expect(paletteItems("a proj").filter((item) => item.kind === "session")).toHaveLength(1);
+  });
+
+  it("reads an orchestrator's own project as the orchestrator", () => {
+    orchestrator.dir = A;
+    create(A);
+    const item = paletteItems("").find((candidate) => candidate.kind === "session");
+    expect(item?.kind === "session" && item.detail).toContain("orchestrator");
+  });
+
+  it("names the orchestrator that started a session", () => {
+    const owner = create(A);
+    const child = create(B);
+    conductor.startedBy[child.key] = owner.key;
+    const item = paletteItems("").find(
+      (candidate) => candidate.kind === "session" && candidate.session.key === child.key,
+    );
+    expect(item?.kind === "session" && item.detail).toContain(label(owner));
+  });
+
+  it("puts a note in the line and finds it by its words", () => {
+    const first = create(A);
+    create(B);
+    noted(first.key, "refactoring the cache");
+    const found = paletteItems("cache refactoring").filter((item) => item.kind === "session");
+    expect(found).toHaveLength(1);
+    expect(found[0].kind === "session" && found[0].detail).toContain("refactoring the cache");
+  });
+
+  it("lists a session that needs you above an idle one made earlier", () => {
+    attention.focused = false;
+    const idle = create(A);
+    const waiting = create(B);
+    started(waiting.key, "pty-2", "session-pty-2");
+    exact("session-pty-2", "stop");
+    const keys = paletteItems("").flatMap((item) => (item.kind === "session" ? [item.session.key] : []));
+    expect(keys).toEqual([waiting.key, idle.key]);
+  });
+
+  it("does not match the jump to a word it has none of, and keeps ids unique", () => {
+    create(A);
+    expect(paletteItems("zoom").some((item) => item.kind === "attention")).toBe(false);
+    const ids = paletteItems("").map((item) => item.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("shows each action's chord", () => {
