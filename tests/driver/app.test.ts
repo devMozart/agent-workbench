@@ -238,23 +238,33 @@ describe("the real app", () => {
             };
           },
         );
+      const before = await grid();
       await driver.actions().keyDown(key).sendKeys("=").keyUp(key).perform();
-      await driver.wait(async () => (await grid()).size === 13, 5_000);
-      // The grid follows the font once the terminal has measured; let it
-      // stop moving before asking what the pty was told.
-      let last = "";
-      await driver.wait(async () => {
-        const { cols, rows } = await grid();
-        const now = `${rows} ${cols}`;
-        const settled = now === last;
-        last = now;
-        if (!settled) await driver.sleep(300);
-        return settled;
-      }, 5_000);
-      await type(driver, "size\n");
-      await waitForText(driver, last);
-      await driver.actions().keyDown(key).sendKeys("0").keyUp(key).perform();
-      await driver.wait(async () => (await grid()).size === 12, 5_000);
+      try {
+        // xterm keeps its grid when the font changes; only the terminal's
+        // own measure moves it, so a larger font must leave fewer columns.
+        let after = before;
+        await driver
+          .wait(async () => {
+            after = await grid();
+            return after.size === 13 && after.cols < before.cols;
+          }, 5_000)
+          .catch(() => {
+            throw new Error("the grid never followed the font");
+          });
+        await type(driver, "size\n");
+        await waitForText(driver, `${after.rows} ${after.cols}`);
+      } finally {
+        await driver.actions().keyDown(key).sendKeys("0").keyUp(key).perform();
+        await driver.wait(async () => {
+          const now = await grid();
+          return (
+            now.size === 12 &&
+            now.cols === before.cols &&
+            now.rows === before.rows
+          );
+        }, 5_000);
+      }
     },
   );
 
