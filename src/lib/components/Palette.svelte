@@ -61,8 +61,8 @@
     }
   }
 
-  /** An id the list's options carry, safe in an attribute. */
-  const optionId = (item: PaletteItem) => `palette-opt-${item.id.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+  /** The id the list's option at a position carries. */
+  const optionId = (index: number) => `palette-opt-${index}`;
 
   // The cursor stays in view.
   $effect(() => {
@@ -143,7 +143,7 @@
       role="combobox"
       aria-expanded="true"
       aria-controls="palette-list"
-      aria-activedescendant={items[cursor] === undefined ? undefined : optionId(items[cursor])}
+      aria-activedescendant={items[cursor] === undefined ? undefined : optionId(cursor)}
       aria-label="Sessions and actions"
       data-testid="palette-field"
     />
@@ -156,7 +156,7 @@
           class="row"
           class:cursor={index === cursor}
           class:off={!live(item)}
-          id={optionId(item)}
+          id={optionId(index)}
           role="option"
           aria-selected={index === cursor}
           aria-disabled={!live(item)}
@@ -165,7 +165,7 @@
           onclick={() => run(item)}
           onpointerdown={(e) => e.preventDefault()}
           onpointermove={(e) => {
-            if (e.movementX !== 0 || e.movementY !== 0) chosen = item.id;
+            if ((e.movementX !== 0 || e.movementY !== 0) && live(item)) chosen = item.id;
           }}
           data-testid="palette-row"
           data-kind={item.kind}
