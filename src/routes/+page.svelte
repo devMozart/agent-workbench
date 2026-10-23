@@ -18,7 +18,7 @@
   import UserStyles from "$lib/components/UserStyles.svelte";
   import { conducted, conductor, handle as conductRequested } from "$lib/conductor.svelte";
   import { handle as browserRequested } from "$lib/browserTools.svelte";
-  import { handle as settingsRequested } from "$lib/settingsTools.svelte";
+  import { handle as settingsRequested, settingsAsk } from "$lib/settingsTools.svelte";
   import { load as loadOrchestrator } from "$lib/orchestrator.svelte";
   import { core } from "$lib/core";
   import { ensure as ensureHooks } from "$lib/hook.svelte";
@@ -424,9 +424,29 @@
     saveLayout();
   }
 
+  /** Whether a modal dialog other than the palette is on screen: the
+      settings, the remote and resume lists, an action's input, or a prompt
+      for the user's say. */
+  function dialogUp(): boolean {
+    return (
+      settings.open ||
+      remote.open ||
+      resume.open ||
+      pluginSections.pending !== null ||
+      conductor.asking !== null ||
+      settingsAsk.asking !== null
+    );
+  }
+
   function onKeydown(e: KeyboardEvent) {
     const action = resolveAction(e, { focus: layout.focus, reviewing });
     if (!action) return;
+    // The palette and the jump move the keyboard, so with a dialog up they
+    // do nothing and the webview gets nothing from them either.
+    if ((action.type === "palette" || action.type === "attention") && dialogUp()) {
+      e.preventDefault();
+      return;
+    }
     // The palette holds the keyboard while it is up: only its own chord,
     // which puts it away, gets past it. The others are swallowed so the
     // native menu does not act on them.
@@ -522,7 +542,7 @@
   function nextSession() {
     const next = nextNeedingYou(conducted);
     if (next === null) {
-      say("Nothing needs you");
+      say("Nothing else needs you");
       return;
     }
     goTo(next.key);

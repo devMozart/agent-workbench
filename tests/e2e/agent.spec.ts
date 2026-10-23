@@ -927,7 +927,7 @@ test.describe("working, and waiting for you", () => {
     await expect(page.locator(".session.on")).toContainText("session 1");
 
     await page.keyboard.press(`${MOD}+.`);
-    await expect(page.getByTestId("flash-readout")).toHaveText("Nothing needs you");
+    await expect(page.getByTestId("flash-readout")).toHaveText("Nothing else needs you");
     await expect(page.locator(".session.on")).toContainText("session 1");
     await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
   });
@@ -1398,6 +1398,29 @@ test.describe("when a dialog closes", () => {
     await expect(page.locator(".project.cursor")).toContainText("two");
     await page.keyboard.press("Enter");
     await expect(page.locator(".project.on")).toContainText("two");
+  });
+
+  test("the palette and the jump leave an open dialog alone", async ({ page }) => {
+    await open(page, { open: [ONE] });
+    await running(page);
+    await page.keyboard.press(`${MOD}+,`);
+    const settings = page.getByTestId("settings");
+    await expect(settings).toBeFocused();
+    const inside = () =>
+      page.evaluate(
+        () => !!document.activeElement?.closest("[data-testid='settings']"),
+      );
+
+    await page.keyboard.press(`${MOD}+Shift+P`);
+    await expect(page.getByTestId("palette")).toHaveCount(0);
+    expect(await inside()).toBe(true);
+
+    await page.keyboard.press(`${MOD}+.`);
+    await expect(page.getByTestId("palette")).toHaveCount(0);
+    expect(await inside()).toBe(true);
+
+    await page.keyboard.press("Escape");
+    await expect(settings).toHaveCount(0);
   });
 
   test("typing reaches the agent again after the settings close", async ({
